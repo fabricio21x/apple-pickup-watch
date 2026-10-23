@@ -38,9 +38,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:46 (siblings), 47 (disabled stores never tracked), 48 (jitter), 49–50 (other colors), 55 (`unavailable`/`default` not in stock)
 - Files: `src/server/domain.ts`, `test/domain.test.ts`
 - Depends on: T1
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: `pickupFrom('available', '')` gives an empty label (src/server/domain.ts:58); `other` pairs for one sibling share one `relatedColors` array (src/server/domain.ts:49). Deviations: `Watch`, `StoreToggle`, `AlertedRow` are local types in domain.ts; `siblingsOf(catalog, part)` is the sibling helper (the picker tree is left to the page); `nextHealth(state, result, {now, expiresAt})` returns `{state, send}` and never sets `downAnnounced` (the caller does once Telegram accepts); a known-expiry failure still counts toward `failures`; `jitterMs` does not clamp 30–3600 s (the API boundary does); "Today" is matched before "Tomorrow", case-sensitive.
 
 ### T5: Apple client
 - Serves: spec.md:46 (catalog parse, productLink check), 47 (stores), 56 (outcome classification), 57 (cURL and token parsing), 63 (fixture cookie guard)
