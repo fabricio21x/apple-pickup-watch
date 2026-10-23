@@ -4,7 +4,7 @@ import type { AppleToken, StoreInfo } from './apple'
 import type { AlertedRow, Watch } from './domain'
 
 export type StoreRow = StoreInfo & { enabled: boolean }
-export type Settings = { zip: string | null; token: AppleToken | null }
+export type Settings = { zip: string | null; token: AppleToken | null; intervalSec: number }
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS parts (
@@ -75,6 +75,7 @@ type SettingsDbRow = {
   token_shld: string | null
   token_ua: string | null
   token_expires_at: number | null
+  interval_sec: number
 }
 
 export function openDb(path: string) {
@@ -109,9 +110,10 @@ export function openDb(path: string) {
   const deleteAlertedForPart = conn.prepare('DELETE FROM alerted WHERE part = ?')
 
   const selectSettings = conn.prepare<[], SettingsDbRow>(
-    'SELECT zip, token_dssid2, token_shld, token_ua, token_expires_at FROM settings WHERE id = 1',
+    'SELECT zip, token_dssid2, token_shld, token_ua, token_expires_at, interval_sec FROM settings WHERE id = 1',
   )
   const updateZip = conn.prepare('UPDATE settings SET zip = ? WHERE id = 1')
+  const updateIntervalSec = conn.prepare('UPDATE settings SET interval_sec = ? WHERE id = 1')
   const updateToken = conn.prepare(
     'UPDATE settings SET token_dssid2 = ?, token_shld = ?, token_ua = ?, token_expires_at = ? WHERE id = 1',
   )
@@ -201,10 +203,13 @@ export function openDb(path: string) {
         token_dssid2 !== null && token_shld !== null && token_ua !== null && token_expires_at !== null
           ? { dssid2: token_dssid2, shldBtCk: token_shld, userAgent: token_ua, expiresAt: token_expires_at }
           : null
-      return { zip: row.zip, token }
+      return { zip: row.zip, token, intervalSec: row.interval_sec }
     },
     setZip(zip: string | null): void {
       updateZip.run(zip)
+    },
+    setIntervalSec(sec: number): void {
+      updateIntervalSec.run(sec)
     },
     setToken(token: AppleToken): void {
       updateToken.run(token.dssid2, token.shldBtCk, token.userAgent, token.expiresAt)

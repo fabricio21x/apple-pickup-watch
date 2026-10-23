@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApple, type Apple, type AppleToken } from '../src/server/apple'
 import { openDb } from '../src/server/db'
 import { createMonitor } from '../src/server/monitor'
@@ -651,5 +651,217 @@ describe('telegram', () => {
     expect(monitor.snapshot().telegramLastError).toEqual({ kind: 'network' })
     expect(JSON.stringify([result, monitor.snapshot()])).not.toContain('SECRET')
     expect(s.alerted()).toEqual([])
+  })
+})
+
+describe('scheduler', () => {
+  const SEC = 1000
+
+  beforeEach(() => {
+    vi.useFakeTimers({ now: NOW })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function schedulerSetup(options: { random?: () => number; appleMs?: number; telegramMs?: number } = {}) {
+    const startTimes: number[] = []
+    const fulfillmentUrls: string[] = []
+    let running = 0
+    let maxRunning = 0
+    const fetchFake = (async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('product-locator-meta')) {
+        return new Response(fixture(url.includes('family=iphoneduo') ? 'locator-duo.json' : 'locator-18pro.json'))
+      }
+      if (url.includes('pickup-message-recommendations')) return new Response(fixture('stores-10001.json'))
+      startTimes.push(Date.now())
+      fulfillmentUrls.push(url)
+      running += 1
+      maxRunning = Math.max(maxRunning, running)
+      if (options.appleMs) await new Promise((resolve) => setTimeout(resolve, options.appleMs))
+      running -= 1
+      return new Response(fulfillmentBody(stock))
+    }) as typeof fetch
+    let stock: Record<string, Stock> = {}
+    const apple = createApple({ fetch: fetchFake, now: Date.now })
+
+    const sent: string[] = []
+    const telegram: Telegram = {
+      async sendMessage(message) {
+        if (options.telegramMs) await new Promise((resolve) => setTimeout(resolve, options.telegramMs))
+        sent.push(message.text)
+        return { ok: true }
+      },
+    }
+
+    const db = openDb(':memory:')
+    const monitor = createMonitor({ apple, telegram, db, now: Date.now, random: options.random ?? (() => 0.5) })
+    await monitor.loadCatalog()
+    const stores = await apple.fetchStores('10001', SILVER)
+    if (stores.ok) db.replaceStores(stores.value)
+    db.setZip('10001')
+    db.setToken({ ...TOKEN, expiresAt: NOW + 1000 * HOUR })
+    db.addWatch(SILVER, true, NOW)
+
+    return {
+      db,
+      monitor,
+      sent,
+      startTimes,
+      fulfillmentUrls,
+      maxRunning: () => maxRunning,
+      setStock: (next: Record<string, Stock>) => {
+        stock = next
+      },
+      advance: (ms: number) => vi.advanceTimersByTimeAsync(ms),
+    }
+  }
+
+  it('sends one fulfillment request for the watched part and its other color on each check', async () => {
+    const s = await schedulerSetup()
+
+    s.monitor.start()
+    await s.advance(0)
+
+    expect(s.fulfillmentUrls).toHaveLength(1)
+    const url = new URL(s.fulfillmentUrls[0] ?? '')
+    expect(url.searchParams.get('parts.0')).toBe(SILVER)
+    expect(url.searchParams.get('parts.1')).toBe(BURGUNDY)
+    s.monitor.stop()
+  })
+
+  it('starts 45 to 75 seconds apart over 100 checks at the default interval', async () => {
+    let n = 0
+    const s = await schedulerSetup({ random: () => [0, 1, 0.5, 0.13, 0.87][n++ % 5] ?? 0 })
+
+    s.monitor.start()
+    await s.advance(110 * 75 * SEC)
+    s.monitor.stop()
+
+    const starts = s.startTimes.slice(0, 101)
+    expect(starts.length).toBe(101)
+    const gaps = starts.slice(1).map((t, i) => t - (starts[i] ?? 0))
+    expect(Math.min(...gaps)).toBe(45 * SEC)
+    expect(Math.max(...gaps)).toBe(75 * SEC)
+  })
+
+  it('measures the gap from start to start when Apple is slow', async () => {
+    const s = await schedulerSetup({ random: () => 0, appleMs: 20 * SEC })
+
+    s.monitor.start()
+    await s.advance(100 * SEC)
+    s.monitor.stop()
+
+    expect(s.startTimes.map((t) => (t - NOW) / SEC)).toEqual([0, 45, 90])
+  })
+
+  it('waits for a cycle that overruns the next start and never runs two checks at once', async () => {
+    const s = await schedulerSetup({ random: () => 0, appleMs: 40 * SEC })
+    s.db.setIntervalSec(30)
+
+    s.monitor.start()
+    await s.advance(200 * SEC)
+    s.monitor.stop()
+
+    expect(s.startTimes.length).toBeGreaterThan(3)
+    expect(s.maxRunning()).toBe(1)
+    const gaps = s.startTimes.slice(1).map((t, i) => t - (s.startTimes[i] ?? 0))
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(40 * SEC)
+  })
+
+  it('never runs a second timer chain when start is called twice', async () => {
+    const s = await schedulerSetup()
+
+    s.monitor.start()
+    s.monitor.start()
+    await s.advance(300 * SEC)
+    s.monitor.stop()
+
+    expect(s.startTimes.map((t) => (t - NOW) / SEC)).toEqual([0, 60, 120, 180, 240, 300])
+  })
+
+  it('does not start a second check when stop then start land during a check', async () => {
+    const s = await schedulerSetup({ appleMs: 20 * SEC })
+
+    s.monitor.start()
+    await s.advance(5 * SEC)
+    s.monitor.stop()
+    s.monitor.start()
+    await s.advance(100 * SEC)
+    s.monitor.stop()
+
+    expect(s.maxRunning()).toBe(1)
+    expect(s.startTimes.map((t) => (t - NOW) / SEC)).toEqual([0, 60])
+  })
+
+  it('stops checking after stop', async () => {
+    const s = await schedulerSetup()
+
+    s.monitor.start()
+    await s.advance(0)
+    s.monitor.stop()
+    await s.advance(600 * SEC)
+
+    expect(s.startTimes).toHaveLength(1)
+  })
+
+  it('applies an interval change made between checks from that moment, without a restart', async () => {
+    const s = await schedulerSetup()
+
+    s.monitor.start()
+    await s.advance(10 * SEC)
+    s.monitor.setInterval(30)
+    await s.advance(100 * SEC)
+    s.monitor.stop()
+
+    expect(s.startTimes.slice(0, 3).map((t) => (t - NOW) / SEC)).toEqual([0, 40, 70])
+  })
+
+  it('applies an interval change made during a check to the next start and still sends one request per period', async () => {
+    const s = await schedulerSetup({ appleMs: 20 * SEC })
+
+    s.monitor.start()
+    await s.advance(5 * SEC)
+    s.monitor.setInterval(300)
+    await s.advance(500 * SEC)
+    s.monitor.stop()
+
+    expect(s.startTimes.map((t) => (t - NOW) / SEC)).toEqual([0, 300])
+  })
+
+  it('stores the interval, defaulting to 60 s, and rejects values outside 30 to 3600 s', async () => {
+    const s = await schedulerSetup()
+
+    expect(s.db.getSettings().intervalSec).toBe(60)
+    s.monitor.setInterval(30)
+    s.monitor.setInterval(3600)
+    expect(() => s.monitor.setInterval(29)).toThrow(RangeError)
+    expect(() => s.monitor.setInterval(3601)).toThrow(RangeError)
+    expect(() => s.monitor.setInterval(45.5)).toThrow(RangeError)
+    expect(s.db.getSettings().intervalSec).toBe(3600)
+  })
+
+  it('reports when the next check is due on the snapshot', async () => {
+    const s = await schedulerSetup({ random: () => 0.5 })
+
+    expect(s.monitor.snapshot().nextStartAt).toBeNull()
+    s.monitor.start()
+    await s.advance(0)
+
+    expect(s.monitor.snapshot().nextStartAt).toBe(NOW + 60 * SEC)
+    s.monitor.stop()
+  })
+
+  it('gives the send pass the next start as its deadline, so a slow Telegram cannot push it past one cycle', async () => {
+    const s = await schedulerSetup({ random: () => 0, telegramMs: 10 * SEC })
+    s.db.setIntervalSec(30)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${SILVER}@R415`]: 'Today', [`${SILVER}@R032`]: 'Today', [`${SILVER}@R095`]: 'Today' })
+
+    s.monitor.start()
+    await s.advance(22 * SEC)
+    s.monitor.stop()
+
+    expect(s.sent).toHaveLength(2)
   })
 })
