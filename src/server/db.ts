@@ -1,10 +1,11 @@
 import Database from 'better-sqlite3'
 import type { CatalogPart, PartNumber, StoreNumber, TrackedPair } from '../shared/types'
 import type { AppleToken, StoreInfo } from './apple'
-import type { AlertedRow, Watch } from './domain'
+import type { AlertedRow, FailureCause, HealthState, Watch } from './domain'
 
 export type StoreRow = StoreInfo & { enabled: boolean }
-export type Settings = { zip: string | null; token: AppleToken | null; intervalSec: number }
+export type Settings = { zip: string | null; token: AppleToken | null; tokenWarned: boolean; intervalSec: number }
+export type Health = HealthState & { cause: FailureCause | null }
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS parts (
@@ -75,8 +76,10 @@ type SettingsDbRow = {
   token_shld: string | null
   token_ua: string | null
   token_expires_at: number | null
+  token_warned: number
   interval_sec: number
 }
+type HealthDbRow = { health_failures: number; health_down_announced: number; health_cause: FailureCause | null }
 
 export function openDb(path: string) {
   const conn = new Database(path)
@@ -110,12 +113,19 @@ export function openDb(path: string) {
   const deleteAlertedForPart = conn.prepare('DELETE FROM alerted WHERE part = ?')
 
   const selectSettings = conn.prepare<[], SettingsDbRow>(
-    'SELECT zip, token_dssid2, token_shld, token_ua, token_expires_at, interval_sec FROM settings WHERE id = 1',
+    'SELECT zip, token_dssid2, token_shld, token_ua, token_expires_at, token_warned, interval_sec FROM settings WHERE id = 1',
   )
   const updateZip = conn.prepare('UPDATE settings SET zip = ? WHERE id = 1')
   const updateIntervalSec = conn.prepare('UPDATE settings SET interval_sec = ? WHERE id = 1')
   const updateToken = conn.prepare(
-    'UPDATE settings SET token_dssid2 = ?, token_shld = ?, token_ua = ?, token_expires_at = ? WHERE id = 1',
+    'UPDATE settings SET token_dssid2 = ?, token_shld = ?, token_ua = ?, token_expires_at = ?, token_warned = 0 WHERE id = 1',
+  )
+  const updateTokenWarned = conn.prepare('UPDATE settings SET token_warned = ? WHERE id = 1')
+  const selectHealth = conn.prepare<[], HealthDbRow>(
+    'SELECT health_failures, health_down_announced, health_cause FROM settings WHERE id = 1',
+  )
+  const updateHealth = conn.prepare(
+    'UPDATE settings SET health_failures = ?, health_down_announced = ?, health_cause = ? WHERE id = 1',
   )
 
   const transaction = <T>(fn: () => T): T => conn.transaction(fn)()
@@ -203,7 +213,7 @@ export function openDb(path: string) {
         token_dssid2 !== null && token_shld !== null && token_ua !== null && token_expires_at !== null
           ? { dssid2: token_dssid2, shldBtCk: token_shld, userAgent: token_ua, expiresAt: token_expires_at }
           : null
-      return { zip: row.zip, token, intervalSec: row.interval_sec }
+      return { zip: row.zip, token, tokenWarned: row.token_warned === 1, intervalSec: row.interval_sec }
     },
     setZip(zip: string | null): void {
       updateZip.run(zip)
@@ -216,6 +226,18 @@ export function openDb(path: string) {
     },
     clearToken(): void {
       updateToken.run(null, null, null, null)
+    },
+    setTokenWarned(warned: boolean): void {
+      updateTokenWarned.run(warned ? 1 : 0)
+    },
+
+    getHealth(): Health {
+      const row = selectHealth.get()
+      if (!row) throw new Error('settings row missing')
+      return { failures: row.health_failures, downAnnounced: row.health_down_announced === 1, cause: row.health_cause }
+    },
+    setHealth(health: Health): void {
+      updateHealth.run(health.failures, health.downAnnounced ? 1 : 0, health.cause)
     },
   }
 }

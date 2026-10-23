@@ -46,6 +46,7 @@ async function setup(options: { appleSeconds?: number } = {}) {
 
   let stock: Record<string, Stock> = {}
   let fulfillmentStatus = 200
+  let networkDown = false
   const fulfillmentUrls: string[] = []
   const fetchFake = (async (input: string | URL | Request) => {
     const url = String(input)
@@ -55,6 +56,7 @@ async function setup(options: { appleSeconds?: number } = {}) {
     if (url.includes('pickup-message-recommendations')) return new Response(fixture('stores-10001.json'))
     fulfillmentUrls.push(url)
     t += (options.appleSeconds ?? 0) * 1000
+    if (networkDown) throw new TypeError('fetch failed')
     if (fulfillmentStatus !== 200) return new Response(fixture('rejected-541.html'), { status: fulfillmentStatus })
     return new Response(fulfillmentBody(stock))
   }) as typeof fetch
@@ -93,6 +95,9 @@ async function setup(options: { appleSeconds?: number } = {}) {
     },
     setFulfillmentStatus: (status: number) => {
       fulfillmentStatus = status
+    },
+    setNetworkDown: (down: boolean) => {
+      networkDown = down
     },
     onSend: (fn: typeof reply) => {
       reply = fn
@@ -527,6 +532,369 @@ describe('send pass', () => {
   })
 })
 
+describe('health', () => {
+  const downs = (s: { texts: () => string[] }) => s.texts().filter((t) => /monitoring is down/i.test(t))
+  const ups = (s: { texts: () => string[] }) => s.texts().filter((t) => /back up/i.test(t))
+
+  async function failing() {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setFulfillmentStatus(541)
+    return s
+  }
+
+  it.each([
+    ['token-rejected', /rejected/i, (s: Awaited<ReturnType<typeof setup>>) => s.setFulfillmentStatus(541)],
+    ['unexpected', /unexpected/i, (s: Awaited<ReturnType<typeof setup>>) => s.setFulfillmentStatus(503)],
+    ['network', /network/i, (s: Awaited<ReturnType<typeof setup>>) => s.setNetworkDown(true)],
+  ])('sends one plain-text "monitoring is down" message naming a %s cause on the third failure, not before', async (_cause, wording, fail) => {
+    const s = await setup()
+    s.watch(SILVER)
+    fail(s)
+
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+    expect(s.attempts).toHaveLength(0)
+    await s.monitor.runCheck()
+
+    expect(downs(s)).toHaveLength(1)
+    expect(downs(s)[0]).toMatch(wording)
+    expect(s.attempts[0]?.button).toBeUndefined()
+  })
+
+  it('names an expired token in the down message', async () => {
+    const s = await failing()
+    s.advance(2 * HOUR)
+
+    await s.monitor.runCheck()
+
+    expect(downs(s)[0]).toMatch(/expired/i)
+  })
+
+  it('sends no further down message while the failures go on', async () => {
+    const s = await failing()
+    for (let i = 0; i < 6; i++) await s.monitor.runCheck()
+
+    expect(downs(s)).toHaveLength(1)
+  })
+
+  it('does not count failures that a success interrupts', async () => {
+    const s = await failing()
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+    s.setFulfillmentStatus(200)
+    await s.monitor.runCheck()
+    s.setFulfillmentStatus(541)
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(0)
+  })
+
+  it('keeps counting failures across a restart over the same database', async () => {
+    const s = await failing()
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+
+    const restarted = createMonitor({ apple: s.apple, telegram: { sendMessage: async (m) => (s.attempts.push({ ...m, at: s.now() }), { ok: true }) }, db: s.db, now: s.now })
+    await restarted.runCheck()
+
+    expect(downs(s)).toHaveLength(1)
+  })
+
+  it('retries the down message on the next failure when Telegram rejected it, and then sends exactly one', async () => {
+    const s = await failing()
+    s.onSend(() => ({ ok: false, error: { kind: 'network' } }))
+    for (let i = 0; i < 3; i++) await s.monitor.runCheck()
+    s.onSend(() => ({ ok: true }))
+
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+
+    expect(downs(s)).toHaveLength(2)
+  })
+
+  it('sends exactly one back up message on the first success after the down message', async () => {
+    const s = await failing()
+    for (let i = 0; i < 3; i++) await s.monitor.runCheck()
+    s.setFulfillmentStatus(200)
+
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+
+    expect(ups(s)).toHaveLength(1)
+    expect(s.attempts[0]?.button).toBeUndefined()
+  })
+
+  it('sends no back up message when no down message was announced', async () => {
+    const s = await failing()
+    await s.monitor.runCheck()
+    s.setFulfillmentStatus(200)
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(0)
+  })
+
+  it('retries the back up message on the next success when Telegram rejected it', async () => {
+    const s = await failing()
+    for (let i = 0; i < 3; i++) await s.monitor.runCheck()
+    s.setFulfillmentStatus(200)
+    s.onSend(() => ({ ok: false, error: { kind: 'timeout' } }))
+    await s.monitor.runCheck()
+    s.onSend(() => ({ ok: true }))
+
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+
+    expect(ups(s)).toHaveLength(2)
+  })
+
+  it('sends exactly one back up message when the monitor restarts between down and up', async () => {
+    const s = await failing()
+    for (let i = 0; i < 3; i++) await s.monitor.runCheck()
+    s.setFulfillmentStatus(200)
+
+    const restarted = createMonitor({ apple: s.apple, telegram: { sendMessage: async (m) => (s.attempts.push({ ...m, at: s.now() }), { ok: true }) }, db: s.db, now: s.now })
+    await restarted.runCheck()
+    await restarted.runCheck()
+
+    expect(ups(s)).toHaveLength(1)
+  })
+
+  it('goes down at once on a token that failed past its known expiry, with exactly one message', async () => {
+    const s = await failing()
+    s.advance(HOUR + 1000)
+
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+
+    expect(downs(s)).toHaveLength(1)
+    expect(downs(s)[0]).toMatch(/expired/i)
+    expect(s.attempts).toHaveLength(1)
+  })
+
+  it('does not go down at once on a rejected token that has not passed its expiry', async () => {
+    const s = await failing()
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(0)
+  })
+
+  it('leaves health untouched by a skipped check', async () => {
+    const s = await failing()
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+    s.db.setZip(null)
+    expect(await s.monitor.runCheck()).toEqual({ skipped: true })
+    s.db.setZip('10001')
+
+    await s.monitor.runCheck()
+
+    expect(downs(s)).toHaveLength(1)
+  })
+
+  it('keeps the failure count and cause on the snapshot, and clears them on success', async () => {
+    const s = await failing()
+    await s.monitor.runCheck()
+    expect(s.monitor.snapshot().health).toEqual({ failures: 1, downAnnounced: false, cause: 'token-rejected' })
+    for (let i = 0; i < 2; i++) await s.monitor.runCheck()
+    expect(s.monitor.snapshot().health).toEqual({ failures: 3, downAnnounced: true, cause: 'token-rejected' })
+
+    s.setFulfillmentStatus(200)
+    await s.monitor.runCheck()
+
+    expect(s.monitor.snapshot().health).toEqual({ failures: 0, downAnnounced: false, cause: null })
+  })
+
+  it('records a rejected health message as the last Telegram error and clears it when Telegram accepts one', async () => {
+    const s = await failing()
+    s.onSend(() => ({ ok: false, error: { kind: 'http', status: 400, description: 'Bad Request: chat not found' } }))
+    for (let i = 0; i < 3; i++) await s.monitor.runCheck()
+    expect(s.monitor.snapshot().telegramLastError).toEqual({ kind: 'http', status: 400, description: 'Bad Request: chat not found' })
+
+    s.onSend(() => ({ ok: true }))
+    await s.monitor.runCheck()
+
+    expect(s.monitor.snapshot().telegramLastError).toBeNull()
+  })
+})
+
+describe('token expiry warning', () => {
+  const MIN = 60_000
+  const warnings = (s: { texts: () => string[] }) => s.texts().filter((t) => /expires/i.test(t))
+
+  async function expiringIn(minutes: number) {
+    const s = await setup()
+    s.watch(SILVER)
+    s.db.setToken({ ...TOKEN, expiresAt: NOW + minutes * MIN })
+    return s
+  }
+
+  it('warns once, naming the expiry time and how to refresh, when the token expires within 15 minutes', async () => {
+    const s = await expiringIn(10)
+
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+
+    expect(warnings(s)).toHaveLength(1)
+    expect(warnings(s)[0]).toMatch(/\d{2}:\d{2}/)
+    expect(warnings(s)[0]).toMatch(/paste a fresh cURL or open apple\.com in Brave/i)
+    expect(s.attempts[0]?.button).toBeUndefined()
+  })
+
+  it('does not warn while the token has more than 15 minutes left', async () => {
+    const s = await expiringIn(16)
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(0)
+  })
+
+  it('warns even when the check is skipped', async () => {
+    const s = await expiringIn(10)
+    s.db.setZip(null)
+
+    expect(await s.monitor.runCheck()).toEqual({ skipped: true })
+
+    expect(warnings(s)).toHaveLength(1)
+  })
+
+  it('does not warn about a token that has already expired', async () => {
+    const s = await expiringIn(-5)
+
+    await s.monitor.runCheck()
+
+    expect(warnings(s)).toHaveLength(0)
+  })
+
+  it('retries the warning on the next cycle when Telegram rejected it', async () => {
+    const s = await expiringIn(10)
+    s.onSend(() => ({ ok: false, error: { kind: 'network' } }))
+    await s.monitor.runCheck()
+    s.onSend(() => ({ ok: true }))
+
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+
+    expect(warnings(s)).toHaveLength(2)
+  })
+
+  it('keeps the warned flag across a restart', async () => {
+    const s = await expiringIn(10)
+    await s.monitor.runCheck()
+
+    const restarted = createMonitor({ apple: s.apple, telegram: { sendMessage: async (m) => (s.attempts.push({ ...m, at: s.now() }), { ok: true }) }, db: s.db, now: s.now })
+    await restarted.runCheck()
+
+    expect(warnings(s)).toHaveLength(1)
+  })
+
+  it('still warns about a newer pair that arrived while the warning was being delivered', async () => {
+    const s = await expiringIn(10)
+    s.onSend(() => {
+      s.db.setToken({ ...TOKEN, shldBtCk: 'id|2|payload|sig', expiresAt: NOW + 12 * MIN })
+      return { ok: true }
+    })
+    await s.monitor.runCheck()
+    s.onSend(() => ({ ok: true }))
+
+    await s.monitor.runCheck()
+
+    expect(warnings(s)).toHaveLength(2)
+  })
+
+  it('warns again about a newer pair once that one nears expiry', async () => {
+    const s = await expiringIn(10)
+    await s.monitor.runCheck()
+    s.db.setToken({ ...TOKEN, shldBtCk: 'id|2|payload|sig', expiresAt: NOW + 2 * HOUR })
+    await s.monitor.runCheck()
+    expect(warnings(s)).toHaveLength(1)
+
+    s.advance(2 * HOUR - 10 * MIN)
+    await s.monitor.runCheck()
+
+    expect(warnings(s)).toHaveLength(2)
+  })
+})
+
+describe('token status', () => {
+  it('is missing when no token is stored', async () => {
+    const s = await setup()
+    s.db.clearToken()
+
+    expect(s.monitor.snapshot().token).toEqual({ status: 'missing', expiresAt: null })
+  })
+
+  it('is untested with its expiry until a check runs, then working after a successful check', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    expect(s.monitor.snapshot().token).toEqual({ status: 'untested', expiresAt: TOKEN.expiresAt })
+
+    await s.monitor.runCheck()
+
+    expect(s.monitor.snapshot().token).toEqual({ status: 'working', expiresAt: TOKEN.expiresAt })
+  })
+
+  it('is rejected after Apple rejects a token that has not expired', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setFulfillmentStatus(541)
+
+    await s.monitor.runCheck()
+
+    expect(s.monitor.snapshot().token.status).toBe('rejected')
+  })
+
+  it('is expired once the stored expiry has passed', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    await s.monitor.runCheck()
+    s.advance(HOUR + 1)
+
+    expect(s.monitor.snapshot().token.status).toBe('expired')
+  })
+
+  it('goes back to untested when a new pair is stored, until the next check', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setFulfillmentStatus(541)
+    await s.monitor.runCheck()
+
+    s.db.setToken({ ...TOKEN, shldBtCk: 'id|2|payload|sig', expiresAt: NOW + 2 * HOUR })
+    expect(s.monitor.snapshot().token.status).toBe('untested')
+
+    s.setFulfillmentStatus(200)
+    await s.monitor.runCheck()
+    expect(s.monitor.snapshot().token.status).toBe('working')
+  })
+
+  it('keeps working through a network failure, which says nothing about the token', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    await s.monitor.runCheck()
+    s.setNetworkDown(true)
+
+    await s.monitor.runCheck()
+
+    expect(s.monitor.snapshot().token.status).toBe('working')
+  })
+
+  it('holds no cookie value or user agent in the snapshot', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    await s.monitor.runCheck()
+
+    const text = JSON.stringify(s.monitor.snapshot())
+
+    expect(text).not.toContain(TOKEN.dssid2)
+    expect(text).not.toContain(TOKEN.shldBtCk)
+    expect(text).not.toContain(TOKEN.userAgent)
+  })
+})
+
 describe('catalog', () => {
   it('upserts by part and never deletes a part Apple stops listing', async () => {
     const s = await setup()
@@ -593,6 +961,21 @@ describe('telegram', () => {
       text: 'hello',
       reply_markup: { inline_keyboard: [[{ text: 'Open', url: SILVER_URL }]] },
     })
+  })
+
+  it('still returns ok when cancelling the success response body rejects', async () => {
+    const { telegram } = telegramWith(
+      async () =>
+        new Response(
+          new ReadableStream({
+            cancel() {
+              throw new Error('cancel failed')
+            },
+          }),
+        ),
+    )
+
+    expect(await telegram.sendMessage(message)).toEqual({ ok: true })
   })
 
   it('classifies an HTTP failure with the description from Telegram JSON', async () => {
@@ -861,6 +1244,17 @@ describe('scheduler', () => {
     expect(() => s.monitor.setInterval(3601)).toThrow(RangeError)
     expect(() => s.monitor.setInterval(45.5)).toThrow(RangeError)
     expect(s.db.getSettings().intervalSec).toBe(3600)
+  })
+
+  it('sends one "monitor started" message when started, and none for a second start call', async () => {
+    const s = await schedulerSetup()
+
+    s.monitor.start()
+    s.monitor.start()
+    await s.advance(0)
+    s.monitor.stop()
+
+    expect(s.sent.filter((t) => /monitor started/i.test(t))).toHaveLength(1)
   })
 
   it('reports when the next check is due on the snapshot', async () => {
