@@ -142,14 +142,15 @@ export function createMonitor(deps: {
 
   async function cycle() {
     if (inFlight) return
-    inFlight = true
-    cycleStartedAt = now()
-    state.nextStartAt = cycleStartedAt + jitterMs(db.getSettings().intervalSec, random)
     try {
+      inFlight = true
+      cycleStartedAt = now()
+      state.nextStartAt = cycleStartedAt + jitterMs(db.getSettings().intervalSec, random)
       await runCheck({ deadline: state.nextStartAt })
     } finally {
       inFlight = false
       if (running) arm()
+      else state.nextStartAt = null
     }
   }
 
@@ -175,6 +176,7 @@ export function createMonitor(deps: {
     stop() {
       running = false
       clearTimeout(timer)
+      if (!inFlight) state.nextStartAt = null
     },
 
     setInterval(sec) {

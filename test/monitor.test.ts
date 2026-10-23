@@ -718,7 +718,7 @@ describe('scheduler', () => {
     }
   }
 
-  it('sends one fulfillment request for the watched part and its other color on each check', async () => {
+  it('a check sends one fulfillment request covering the watched part and its other color', async () => {
     const s = await schedulerSetup()
 
     s.monitor.start()
@@ -806,6 +806,27 @@ describe('scheduler', () => {
     expect(s.startTimes).toHaveLength(1)
   })
 
+  it('does not start another check after stop is called during a check', async () => {
+    const s = await schedulerSetup({ appleMs: 20 * SEC })
+
+    s.monitor.start()
+    await s.advance(5 * SEC)
+    s.monitor.stop()
+    await s.advance(600 * SEC)
+
+    expect(s.startTimes).toHaveLength(1)
+  })
+
+  it('reports no next check on the snapshot once the scheduler is stopped', async () => {
+    const s = await schedulerSetup()
+
+    s.monitor.start()
+    await s.advance(0)
+    s.monitor.stop()
+
+    expect(s.monitor.snapshot().nextStartAt).toBeNull()
+  })
+
   it('applies an interval change made between checks from that moment, without a restart', async () => {
     const s = await schedulerSetup()
 
@@ -859,9 +880,9 @@ describe('scheduler', () => {
     s.setStock({ [`${SILVER}@R250`]: 'Today', [`${SILVER}@R415`]: 'Today', [`${SILVER}@R032`]: 'Today', [`${SILVER}@R095`]: 'Today' })
 
     s.monitor.start()
-    await s.advance(22 * SEC)
+    await s.advance(30 * SEC)
     s.monitor.stop()
 
-    expect(s.sent).toHaveLength(2)
+    expect(s.startTimes.map((t) => (t - NOW) / SEC)).toEqual([0, 22.5])
   })
 })
