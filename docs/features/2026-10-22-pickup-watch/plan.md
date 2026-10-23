@@ -94,9 +94,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:62 (bind 127.0.0.1, 0.0.0.0 when LAN is on), 64 (one command), design.md decisions 19, 22, 23
 - Files: `src/server/index.ts`, `launchd/com.pickup-watch.plist`, `README.md`, `package.json` (start script if T1's needs changes)
 - Depends on: T10
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: the fatal handler logs only `err.name`, so a bad PORT or a port clash shows "uncaught exception: Error" with no cause, and under launchd that becomes a silent restart loop (src/server/index.ts:15); unconfigured Telegram shows a made-up `http` "Telegram is not configured" lastError on the page (src/server/index.ts:30), though nothing is marked alerted without a real send; `EXTENSION_ID` format is not checked (src/server/boot.ts:11); one test asserts both bind cases (test/boot.test.ts:43). Reviewer verified live: 127.0.0.1-only bind, Host guard on static files, 0700/0600 modes, LAN bind `*:4319` after opt-in and restart with no loopback URL listed. Deviations: extra `src/server/boot.ts` (`readEnv`, `bindHost`, `prepareDataDir`) with tests; the server listens before loading the catalog; `data/` and `dist/` resolve from the repo root; the plist logs to `data/pickup-watch.log`; the `lanHosts` internal-interface fix from T9 landed here.
 
 ### T12: Spike result and token source
 - Serves: spec.md:58 (written result; the extension keeps the token valid while Brave is open)
