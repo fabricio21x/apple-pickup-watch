@@ -126,8 +126,7 @@ function TokenSetting({ token, act }: { token: StateDto['token']; act: Act }) {
             aria-label="cURL command"
             value={curl}
             onChange={(e) => setCurl(e.target.value)}
-            rows={6}
-            className="font-mono text-xs break-all"
+            className="h-40 field-sizing-fixed overflow-y-auto font-mono text-xs break-all"
           />
           {error && (
             <p role="alert" className="text-sm break-words text-destructive">
