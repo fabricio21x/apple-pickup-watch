@@ -561,6 +561,16 @@ describe('PUT /api/lan', () => {
     })
   })
 
+  it('does not list a loopback interface among the LAN URLs', async () => {
+    const s = await setup({ lanEnabled: true })
+    s.db.setLanEnabled(true)
+    s.setInterfaces({ lo0: [{ ...iface('127.0.0.1')[0]!, internal: true }], en0: iface('192.168.1.20') })
+
+    const { lan } = await s.state()
+
+    expect(lan.urls).toEqual([`http://192.168.1.20:${PORT}`, `http://fabs-mac.local:${PORT}`])
+  })
+
   it('reports a restart is needed when the saved value is switched off while the server booted with it on', async () => {
     const s = await setup({ lanEnabled: true })
     s.db.setLanEnabled(true)

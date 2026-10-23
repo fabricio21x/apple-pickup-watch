@@ -76,7 +76,7 @@ export function createApi(deps: ApiDeps) {
   const lanHosts = () => {
     const addresses = Object.values(networkInterfaces())
       .flatMap((list) => list ?? [])
-      .filter((i) => i.family === 'IPv4')
+      .filter((i) => i.family === 'IPv4' && !i.internal)
       .map((i) => i.address)
     return [...addresses, `${hostname().toLowerCase().replace(/\.local$/, '')}.local`]
   }
