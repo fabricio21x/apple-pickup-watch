@@ -114,6 +114,46 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Review: approve-with-comments, 0 fix rounds
 - Notes: Non-blocking: the textarea can still be dragged taller by hand (src/web/SettingsStrip.tsx:129, add `resize-none`); `DialogContent` has no max height, so viewports under ~420 px tall clip it (src/web/components/ui/dialog.tsx:64); `text-xs` under 16 px makes iOS Safari zoom on focus (src/web/SettingsStrip.tsx:129). Verified in Chromium at 375×667: the textarea stays 160 px with a 17.5 KB paste, no horizontal scroll, and Save and the rejection reason stay in view. Deviation: field sizing is overridden on this textarea, not in the shared component.
 
+### T14: Unlocked buy link and the trade-in check
+- Serves: spec.md:61 (buy button preselects what Apple's URL supports); design.md decision 10, Rollout amendment step 0. Change C2 in changes.md.
+- Files: `src/server/apple.ts` (catalog `buyUrl` = `productLink` + `-unlocked`, `productLink` with no query or fragment), `test/apple.test.ts`, `docs/features/2026-10-22-pickup-watch/apple-api-notes.md`
+- Depends on: none
+- Status: todo
+- Review:
+- Notes: First ask the owner to open one `…-unlocked?igt=true` link in Brave and say whether No trade-in is selected; add `?igt=true` only if it is, and record the answer in apple-api-notes.md. The `-unlocked` link selecting color and Unlocked is confirmed (owner, 2026-10-23).
+
+### T15: Cap tracked parts at 20
+- Serves: spec.md:54 (one request), 55 (cap, refusal with count); design.md decision 24, decision 5 (re-posting a watched part is a no-op). Change C5.
+- Files: `src/server/domain.ts` (`trackedParts`, watched first), `src/server/monitor.ts` (part list cut at 20), `src/server/api.ts` (409 `parts-cap` on watch create and other-colors on, ignoring already-watched parts), `src/shared/types.ts` (`StateDto.partsCount`), `test/domain.test.ts`, `test/monitor.test.ts`, `test/api.test.ts`
+- Depends on: T14
+- Status: todo
+- Review:
+- Notes:
+
+### T16: One stock message per model + storage
+- Serves: spec.md:28-30, 32 (grouping, sound, other colors), 56-57, 59-60, 62 (no repeats, Today/Tomorrow alone sends nothing); design.md decisions 3 (case-insensitive label), 6 (grouped send pass, not-checked stores, non-retryable 4xx skips a group, role check at commit). Change C1.
+- Files: `src/server/domain.ts` (`stockMessages` replaces `orderEvents`, `pickupFrom`), `src/server/monitor.ts` (per-group send pass and commit), `src/shared/types.ts` (`StockMessage`), `test/domain.test.ts`, `test/monitor.test.ts`
+- Depends on: T15
+- Status: todo
+- Review:
+- Notes: Remove `orderEvents` and the per-event pass. Until T17, `telegram.ts` may render a `StockMessage` as plain text.
+
+### T17: HTML Telegram messages with per-color buy buttons
+- Serves: spec.md:29, 31, 34, 59, 61, 63 (format, buttons, styled health/token/start/test messages); design.md decision 25. Change C1, C2.
+- Files: `src/server/telegram.ts` (`escapeHtml`, `parse_mode: 'HTML'`, `disable_notification`, one inline URL button per in-stock color, styled other messages), `src/server/monitor.ts` (pass `sound`), `test/telegram.test.ts` (new), `test/monitor.test.ts`
+- Depends on: T16
+- Status: todo
+- Review:
+- Notes: Remove the single "Open buy page" button and `stockMessage(event, …)`. Only `<b>` appears in text; URLs only in buttons; worst case 4 colors × 12 stores under 4096 characters.
+
+### T18: Four-view page with sidebar and bottom tabs
+- Serves: spec.md:35, 55 (parts count and refusal message), 66, 69-71; design.md decisions 18, 24 (over-cap parts in red, "Not checked" on the board). Change C4.
+- Files: `src/web/App.tsx` (shell, hash view, sidebar at md+, top bar and bottom tabs below), `src/web/StockBoard.tsx` (new), `src/web/Watches.tsx`, `src/web/Stores.tsx` (from `Location.tsx`), `src/web/Settings.tsx` (from `SettingsStrip.tsx`), `src/web/logic.ts`, `test/web-logic.test.ts`
+- Depends on: T15
+- Status: todo
+- Review:
+- Notes: Delete `Location.tsx` and `SettingsStrip.tsx` after the move. Worth folding in from T13's notes: `resize-none` and 16 px text on the cURL textarea, a max height on the dialog. Check by hand at 375 px and 1280 px, plus refresh and back.
+
 ## Final review
 - Status: todo
 - Review:
@@ -122,4 +162,4 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 ## Escalations
 - T12 blocked (2026-10-23): the owner has not run the token spike yet (no `spike/out/`). Needs the spike outcome: which variant, if any, kept a pair accepted for 2+ h unattended, plus the replay and parts-cap results for `spike/RESULT.md`. Resume with `/fbs:implement pickup-watch` once it is run. Cleanup and the final review wait for T12.
 - Spike results so far (2026-10-23): replay — Node fetch and curl both 200; parts-cap — HTTP 200 but every store returned 20/40 parts (Apple caps at 20 parts per request); playwright — round 1 HTTP 541 (rejected); cdp — round 1 HTTP 200, rounds 2–3 pending.
-- Waiting on `/fbs:architect pickup-watch` (spec/design changes from the owner's walkthrough, 2026-10-23): (1) one Telegram message per part listing its stores, grouped Today/Tomorrow, each store a buy link, HTML-formatted with emojis (spec.md:28, 52; design decisions 6, 10); (2) buy links that preselect color, connectivity and trade-in (decision 10; needs research on Apple's URL); (3) dashboard layout with client navigation instead of one scrolling column (decision 18); (4) cap tracked parts at 20, the owner's answer to the parts-cap result (Risks: "Apple caps parts per request"). Tasks for these are added here after the design is re-approved.
+- Resolved (2026-10-23): the owner's walkthrough changes went through `fbs:changes` (changes.md C1-C5). The spec and design were amended and re-approved by the owner, and became T14-T18. C3 was T13.

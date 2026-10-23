@@ -9,16 +9,16 @@
 - Source: user, walkthrough after the first real run ("ok, did 1 and got bunch of alerts. I think we need to improve that:")
 - Words: A message per part and instead of a button per message we can send the links per store so if iphone 18 pro max 256gb black is available in 10 stores, we can send 1 message with the list of stores and each will be the link for the puchase. We can have them also separated by today or tomorrow, in the same message. We can use html or markdown to format the messages better, lets make use of that. We can add emojis or colors so its easier to differentiate when reading
 - Level: scope
-- Status: open
-- Outcome: pending
+- Status: planned
+- Outcome: spec.md Scope (alerts, content, sound, other colors, other messages), acceptance criteria 56-57, 59-60, 62-63 and decision log; design.md decisions 3, 6, 25, Data shapes (`StockMessage`), Test seams, Risks, amendment panel. Amended to one buy button per color after the panel (staff-engineer-2). Spec and design approved by the owner ("yes", 2026-10-23). Tasks T16, T17.
 
 ## C2: Buy links that preselect color, connectivity and trade-in
 - Date: 2026-10-23
 - Source: user, same walkthrough
 - Words: the links in the messages only load the page with the model and storage selected, no color, conectivity or trade-in, which slows down the process of buying quickly.
 - Level: scope
-- Status: open
-- Outcome: pending
+- Status: planned
+- Outcome: spec.md Scope (buy links), out of scope, acceptance criterion 61 and decision log; design.md decision 10, Constraints, Rollout step 0. `-unlocked` confirmed by the owner; `igt=true` checked in T14; no store or zip key in Apple's URL. Spec and design approved by the owner ("yes", 2026-10-23). Task T14.
 
 ## C3: cURL dialog hides Save on a long paste
 - Date: 2026-10-23
@@ -33,13 +33,13 @@
 - Source: user, same walkthrough
 - Words: The one-page feels awful, I think we can have a single page but add some sort of client navigation so it feels better, too much scrolling, I get lost when going through each of the cards, a dashboard like layout would be way better
 - Level: scope
-- Status: open
-- Outcome: pending
+- Status: planned
+- Outcome: spec.md Scope (UI) and acceptance criteria 66, 69-71; design.md decision 18, File map. Spec and design approved by the owner ("yes", 2026-10-23). Task T18.
 
 ## C5: Cap tracked parts at 20
 - Date: 2026-10-23
 - Source: user, answering the token spike's parts-cap result (Apple returns at most 20 parts per request, plan.md Escalations)
 - Words: About the 20 part limit, yeah we can limit to 20 parts for now to avoid redesigning
 - Level: scope
-- Status: open
-- Outcome: pending
+- Status: planned
+- Outcome: spec.md Scope (parts cap), out of scope, acceptance criterion 55 and Facts; design.md decision 24, StateDto, Risks. Spec and design approved by the owner ("yes", 2026-10-23). Tasks T15, T18.
