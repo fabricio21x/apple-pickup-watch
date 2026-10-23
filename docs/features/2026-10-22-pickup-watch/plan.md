@@ -22,9 +22,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: "The token spike ends within 1 day with a written result" (spec.md:58; design.md Rollout step 1.1–1.5, including the plain Telegram send for an env list of parts)
 - Files: `spike/token.ts`
 - Depends on: T1
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking, worth knowing before the owner's run: browser variants test the pair with Node fetch only, no curl control (spike/token.ts:381); the CDP retry loop also swallows round errors and restarts from round 1 (spike/token.ts:409); one transient error ends a playwright run (spike/token.ts:372); every 541 prints "EXPIRED" and failed cycles count as accepted (spike/token.ts:331); bad Telegram creds show only when stock appears (spike/token.ts:310); a failed curl control aborts replay (spike/token.ts:314); alerts are unpaced (spike/token.ts:351). vitest also picks up `.claude/worktrees/**` tests; exclude it in a later vitest config. Deviations: `parts-cap` needs the cURL pair; only `dssid2`, `shld_bt_ck` and the UA are sent; `--adopt` ignores cookie clears; browser variants run `--rounds` (default 3, 90 min apart); `cdp` takes `--profile`.
 
 ### T3: Fixture capture script and fixtures
 - Serves: setup for spec.md:46, 47, 55, 56 (design.md decision 20, Test seams fixture list)
