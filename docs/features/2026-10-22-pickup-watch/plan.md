@@ -44,11 +44,11 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 
 ### T5: Apple client
 - Serves: spec.md:46 (catalog parse, productLink check), 47 (stores), 56 (outcome classification), 57 (cURL and token parsing), 63 (fixture cookie guard)
-- Files: `src/server/apple.ts`, `test/apple.test.ts`
+- Files: `src/server/apple.ts`, `test/apple.test.ts`, `vitest.config.ts`
 - Depends on: T3, T4
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: `buyUrl` stores the raw `productLink` while the check validates the parsed URL (src/server/apple.ts:68); one entry without `pickupSearchQuote` fails the whole check as `unexpected` (src/server/apple.ts:97); expiry boundary `>` vs `<=` (src/server/apple.ts:179 vs 220); token values are not checked for control characters, so a bad pair would surface as `network` (src/server/apple.ts:175); no test names the UNLOCKED/US filter directly (test/apple.test.ts:45). Deviations: `createApple({fetch, now, timeoutMs?})` → `{fetchCatalog, fetchStores, check}`, standalone `parseCurl`/`parseTokenBody`; `AppleToken.expiresAt` in ms; `check` takes `watchedParts` and `otherParts` separately; a missing User-Agent is rejected; `fetchCatalog` fails whole if either family fails; `vitest.config.ts` excludes `.claude/**` and will need merging with T10's `vite.config.ts`; Windows `^`-escaped cURL not parsed.
 
 ### T6: Check cycle and alerts
 - Serves: spec.md:47 (off never alerts), 49–50 (other-color messages), 52–55 (in-stock, out-of-stock, no repeats incl. restart)
