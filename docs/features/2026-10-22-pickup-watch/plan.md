@@ -106,6 +106,14 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Review:
 - Notes:
 
+### T13: cURL paste dialog keeps its Save button reachable
+- Serves: "the user can paste a cURL from their browser to replace it" (spec.md:57), 375 px usable (spec.md:61). Owner's walkthrough 2026-10-23: a long paste grows the textarea and pushes the Save button out of reach.
+- Files: `src/web/SettingsStrip.tsx` (and `src/web/components/ui/textarea.tsx` / `dialog.tsx` only if needed)
+- Depends on: T10
+- Status: todo
+- Review:
+- Notes:
+
 ## Final review
 - Status: todo
 - Review:
@@ -113,3 +121,5 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 
 ## Escalations
 - T12 blocked (2026-10-23): the owner has not run the token spike yet (no `spike/out/`). Needs the spike outcome: which variant, if any, kept a pair accepted for 2+ h unattended, plus the replay and parts-cap results for `spike/RESULT.md`. Resume with `/fbs:implement pickup-watch` once it is run. Cleanup and the final review wait for T12.
+- Spike results so far (2026-10-23): replay — Node fetch and curl both 200; parts-cap — HTTP 200 but every store returned 20/40 parts (Apple caps at 20 parts per request); playwright — round 1 HTTP 541 (rejected); cdp — round 1 HTTP 200, rounds 2–3 pending.
+- Waiting on `/fbs:architect pickup-watch` (spec/design changes from the owner's walkthrough, 2026-10-23): (1) one Telegram message per part listing its stores, grouped Today/Tomorrow, each store a buy link, HTML-formatted with emojis (spec.md:28, 52; design decisions 6, 10); (2) buy links that preselect color, connectivity and trade-in (decision 10; needs research on Apple's URL); (3) dashboard layout with client navigation instead of one scrolling column (decision 18); (4) cap tracked parts at 20, the owner's answer to the parts-cap result (Risks: "Apple caps parts per request"). Tasks for these are added here after the design is re-approved.
