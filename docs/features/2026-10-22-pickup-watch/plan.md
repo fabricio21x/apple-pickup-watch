@@ -76,11 +76,11 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 
 ### T9: HTTP API
 - Serves: spec.md:47 (zip save keeps toggles), 57 (token status, cURL paste), 59 (test message route), 60 (grid DTO), 62 (Host and loopback guards), 63 (no secrets in any response)
-- Files: `src/server/api.ts`, `test/api.test.ts`
+- Files: `src/server/api.ts`, `test/api.test.ts`, `src/shared/types.ts` (DTOs), `src/server/db.ts` (`lanEnabled`)
 - Depends on: T8
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: `lanHosts()` keeps internal interfaces, so `lan.urls` lists `http://127.0.0.1:…` (src/server/api.ts:77, add `!i.internal`); route params skip zod (src/server/api.ts:185, 204); a known-expiry outage shows `failing` until the down message is delivered (src/server/api.ts:66); a `{curl}` body replaces any pair whatever its origin (src/server/api.ts:246; still loopback-only). Routes: `GET /api/state`, `PUT /api/zip`, `PUT /api/stores/:store`, `POST /api/watches`, `DELETE|PATCH /api/watches/:part`, `PUT /api/interval`, `PUT /api/lan`, `POST /api/token`, `POST /api/telegram/test`. Deviations: `createApi({db, monitor, apple, telegram|null, lanEnabled, extensionId, port, now, hostname?, networkInterfaces?})`; guards run on `*`, so static routes added by index.ts are guarded too; the loopback guard uses `getConnInfo` and fails closed; the grid covers watched parts only; empty store list → 422, empty catalog → 503, lookup failure → 502; re-watching a part is a no-op.
 
 ### T10: The page
 - Serves: spec.md:46 (picker), 47 (zip and store toggles), 49 (other-colors switch), 51 (interval), 57 (token status and paste dialog), 59 (test button), 60 (grid), 61 (375 px), 62 (Wi-Fi toggle and LAN URL)
