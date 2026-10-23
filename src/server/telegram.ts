@@ -63,7 +63,10 @@ export function createTelegram(deps: {
         // The thrown error is dropped: its message can hold the request URL, which carries the bot token.
         return { ok: false, error: { kind: e instanceof Error && e.name === 'TimeoutError' ? 'timeout' : 'network' } }
       }
-      if (res.ok) return { ok: true }
+      if (res.ok) {
+        await res.body?.cancel()
+        return { ok: true }
+      }
 
       let json: unknown
       try {

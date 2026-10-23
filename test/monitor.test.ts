@@ -377,18 +377,21 @@ describe('send pass', () => {
     expect((c ?? 0) - (b ?? 0)).toBeGreaterThanOrEqual(1100)
   })
 
-  it('sends watched in-stock before other-color in-stock before watched out-of-stock', async () => {
+  it('sends watched in-stock, then other-color in-stock, then watched out-of-stock, then other-color out-of-stock', async () => {
     const s = await setup()
     s.watch(SILVER, true)
-    s.setStock({ [`${SILVER}@R250`]: 'Today' })
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${BURGUNDY}@R415`]: 'Today' })
     await s.monitor.runCheck()
     s.attempts.length = 0
 
-    s.setStock({ [`${BURGUNDY}@R250`]: 'Today' })
+    s.setStock({ [`${SILVER}@R032`]: 'Today', [`${BURGUNDY}@R032`]: 'Today' })
     await s.monitor.runCheck()
 
-    expect(s.texts()[0]).toMatch(/^Other color in stock/)
-    expect(s.texts()[1]).toMatch(/^Out of stock/)
+    expect(s.texts()).toHaveLength(4)
+    expect(s.texts()[0]).toMatch(/^In stock/)
+    expect(s.texts()[1]).toMatch(/^Other color in stock/)
+    expect(s.texts()[2]).toMatch(/^Out of stock/)
+    expect(s.texts()[3]).toMatch(/^Other color out of stock/)
   })
 
   it('stops at the first send failure, commits nothing, and sends the events again next check', async () => {
@@ -478,6 +481,34 @@ describe('send pass', () => {
 
     expect(s.attempts).toHaveLength(1)
     expect(s.alerted()).toEqual([`${SILVER}@R250`])
+  })
+
+  it('drops a stale other-color event when its color becomes watched during the pass, and the next check sends the watched alert', async () => {
+    const s = await setup()
+    s.watch(SILVER, true)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${BURGUNDY}@R250`]: 'Today' })
+    let first = true
+    s.onSend(() => {
+      if (first) {
+        first = false
+        s.watch(BURGUNDY)
+        s.monitor.reconcile({ newlyWatched: [BURGUNDY] })
+      }
+      return { ok: true }
+    })
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(1)
+    expect(s.texts()[0]).not.toContain('Other color')
+    expect(s.alerted()).toEqual([`${SILVER}@R250`])
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(2)
+    expect(s.texts()[1]).toMatch(/^In stock/)
+    expect(s.texts()[1]).toContain('iPhone 18 Pro 512GB Burgundy')
+    expect(s.alerted()).toEqual([`${SILVER}@R250`, `${BURGUNDY}@R250`])
   })
 
   it('writes no row when the store is toggled off while its message is being delivered', async () => {

@@ -1,4 +1,4 @@
-import type { CheckOutcome, Observation, PartNumber, StockEvent, StoreNumber, TelegramError } from '../shared/types'
+import type { CheckOutcome, Observation, PartNumber, StockEvent, StoreNumber, TelegramError, TrackedPair } from '../shared/types'
 import type { Apple } from './apple'
 import type { Db } from './db'
 import { diff, orderEvents, trackedPairs } from './domain'
@@ -45,8 +45,8 @@ export function createMonitor(deps: {
   }
 
   const currentTracked = () => trackedPairs(db.listWatches(), db.listParts(), db.listStores())
-  const isTracked = (pair: { part: PartNumber; store: StoreNumber }) =>
-    currentTracked().some((t) => t.part === pair.part && t.store === pair.store)
+  const isTracked = (pair: TrackedPair) =>
+    currentTracked().some((t) => t.part === pair.part && t.store === pair.store && t.role === pair.role)
 
   async function loadCatalog() {
     const result = await apple.fetchCatalog()
