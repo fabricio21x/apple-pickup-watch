@@ -41,6 +41,10 @@ The repository holds no source code, configuration or tests yet, so no explorers
   - `GET /shop/product-locator-meta?family=iphone18pro` returns JSON at `body.productLocatorOverlayData.productLocatorMeta.products[]` with `partNumber`, `carrierModel`, `productTitle`, `dimensionCapacity`, `dimensionColor`, `productLink`; 32 `UNLOCKED/US` entries (16 iPhone 18 Pro, 16 iPhone 18 Pro Max). `family=iphoneduo` returns 8. The other carriers' entries repeat the same part numbers. `family=iphone18promax` returns the same list as `iphone18pro`.
   - `GET /shop/pickup-message-recommendations?…&location=<zip>&product=<part>` returns 12 stores at `body.PickupMessage.stores[]` (capital P) with `storeNumber`, `storeName`, `city`, `state`, `storedistance` (miles, a number).
   - Both `…/6.3-inch-display-512gb-silver` and `…-unlocked` buy links return 200; whether `?location=` is honoured cannot be seen without a browser.
+- **Apple checked 2026-10-23 for changes 1–5:**
+  - `fulfillment-messages` answers at most 20 parts per request (spike parts-cap: every store returned 20 of 40, plan.md Escalations).
+  - `product-locator-meta` gives one `productLink` per part for every carrier, with no carrier in it (`…/6.9-inch-display-256gb-black`). The buy page's own data names each configuration with a carrier suffix in `seoUrlToken`: `…-256gb-black-att`, `-t-mobile`, `-verizon`, `-unlocked`. The owner saw the suffix-less link open with only model and storage selected (user, 2026-10-23).
+  - The buy page's URL-parameter schema lists `igt` (`ignoreTradeIn`, Boolean) and trade-in keys (`tt`, `pid`, `tdc`, `tia`), and no key for a store, zip or location. Whether the page honours `igt` on load needs a browser.
 - **Older open-source monitors**, read with `gh` on 2026-10-23:
   - `fjwillemsen/Apple-Store-Stock-Notifier` (`store_checker.py`) and `worthbak/inventory-checker-app` (`FulfillmentModel.swift`, `PartAvailability.swift`) both used the `fulfillment-messages` route without any token, and the first used `product-locator-meta` for its catalog;
   - the second saw a third `pickupDisplay` value, `ineligible`;
@@ -78,7 +82,7 @@ The repository holds no source code, configuration or tests yet, so no explorers
 
 1. **Stack:** Node 22 + TypeScript run by `tsx`, Hono on `@hono/node-server`, `better-sqlite3`, zod at every boundary, Vite + React + Tailwind + shadcn/ui, vitest. Telegram and Apple are called with plain `fetch`, with no SDK. Alternatives: Next.js, which needs a separate worker, and NestJS, which adds layers. `node:sqlite` is still experimental in Node 22. Why: one long-running loop for one user, and the owner's recorded preference.
 2. **Alert state is the alerted set** (option A). A missing row means "not alerted as in stock", so stock already present when a watch is added, a store is re-enabled or the app first starts alerts on the next check (user, 2026-10-23).
-3. **Pickup state is `in(label) | out`.** `pickupDisplay: "available"` is `in`; every other value (`unavailable`, `default`, `ineligible`, anything new) is `out`. The label is "Today" or "Tomorrow" when the `pickupSearchQuote` contains that word, otherwise the quote itself. A label change while in stock (Tomorrow → Today) sends nothing and only updates the grid, because the spec's state is in or not in (spec.md:26-27).
+3. **Pickup state is `in(label) | out`.** `pickupDisplay: "available"` is `in`; every other value (`unavailable`, `default`, `ineligible`, anything new) is `out`. The label is "Today" or "Tomorrow" when the `pickupSearchQuote` contains that word, otherwise the quote itself. A label change while in stock (Tomorrow → Today) sends nothing and only updates the stock board, because the spec's state is in or not in (spec.md:28, 62).
 4. **The tracked set is one pure function**, `trackedPairs(watches, catalog, stores)`:
    - each watch's part × each enabled store, with role `watched`;
    - when the watch's other-colors switch is on, each same-model, same-capacity, different-color part × each enabled store, with role `other` and the watched colors it relates to;
@@ -90,19 +94,26 @@ The repository holds no source code, configuration or tests yet, so no explorers
    - Turning off a store or watch, flipping the other-colors switch, or saving a zip prunes the alerted set silently: no out-of-stock message is sent for a pair the user stopped tracking.
    - Every such API mutation calls `monitor.reconcile()`, which recomputes `trackedPairs` and calls `db.pruneAlerted(tracked)`.
    - Creating a watch also deletes the alerted rows of its part, so the next check alerts it with the watched role even if it was alerted before as another color.
-6. **Send pass:** events in priority order:
-   1. watched in-stock;
-   2. other-color in-stock;
-   3. watched out-of-stock;
-   4. other-color out-of-stock.
+6. **Send pass, one message per model + storage:** the check's events are grouped by `modelName + capacity` (the sibling key of decision 4) by a pure `stockMessages(events, tracked, observations, alerted, catalog, stores)`. Each group with at least one event becomes one `StockMessage` (data shapes):
+   - `colors`: every tracked pair of the group observed `in` this check, by color, watched colors first and then catalog order, stores by distance, each with its label and `isNew` (an `in` event this check);
+   - `gone`: the group's `out` events, as color and store name;
+   - `sound`: true when the group has at least one `in` event;
+   - `commit`: the pairs to insert (its `in` events) and delete (its `out` events).
 
-   - Messages go one at a time, about 1.1 s apart.
-   - Before each send, the pass recomputes `trackedPairs` from the current db and skips an event whose pair is no longer tracked.
-   - After Telegram accepts, the insert or delete runs in one synchronous better-sqlite3 transaction together with that membership check.
-   - Any failure stops the pass, and the uncommitted events come back in the next diff. A 429 waits `retry_after` once if that fits before the deadline.
-   - The pass ends 5 s before the next check is due. The first watched in-stock event is always attempted whatever the deadline, and the next start waits until that send finishes.
+   A tracked pair missing from a 200 response keeps its alerted state (decision 8) and is neither listed nor reported gone. Messages go in priority order:
+   1. groups with a watched in-stock event;
+   2. groups with only other-color in-stock events;
+   3. groups with only out-of-stock events.
 
-   Why: a first-start burst must not push a watched alert past one cycle or break the 45–75 s spacing, a misconfigured bot must not mark stock as alerted, and a mutation made during a pass must not be undone by a stale diff.
+   Ties keep catalog order.
+
+   - Messages go one at a time, about 1.1 s apart, sent with `disable_notification: !sound`.
+   - Before each send, the pass recomputes `trackedPairs` from the current db, drops the group's events whose pair is no longer tracked and rebuilds the message; a group left with no event is skipped.
+   - After Telegram accepts, all of the message's inserts and deletes run in one synchronous better-sqlite3 transaction together with that membership check.
+   - Any failure stops the pass, and the uncommitted groups come back, rebuilt, in the next diff. A 429 waits `retry_after` once if that fits before the deadline.
+   - The pass ends 5 s before the next check is due. The first message with a watched in-stock event is always attempted whatever the deadline, and the next start waits until that send finishes.
+
+   Why: one notification per restock of a model + storage, the latest message is always the whole picture (spec.md:28-30), a misconfigured bot must not mark stock as alerted, and a mutation made during a pass must not be undone by a stale diff. The alerted set keeps its meaning, so nothing migrates. Principle: principle-model-the-domain
 7. **Scheduler:** single-flight, with an `inFlight` flag in `monitor.ts`.
    - When a check starts, the next start is set to `now + interval × U(0.75, 1.25)`; the end of the cycle is the only place that arms the timer, which waits for the rest.
    - A start that finds `inFlight` set returns at once.
@@ -123,8 +134,10 @@ The repository holds no source code, configuration or tests yet, so no explorers
 10. **Catalog from `product-locator-meta`** (option A), for families `iphone18pro` and `iphoneduo`, keeping `UNLOCKED/US` entries.
     - Fetched once at startup, as an upsert by part that never deletes, so watches keep a valid row. While the `parts` table is empty, each check cycle retries it.
     - Model name, capacity and color name come from splitting `productTitle` at the capacity token, after normalising non-breaking spaces. Siblings share `modelName + capacity`.
-    - The buy link is `productLink` as Apple gives it, because one part number covers every carrier. The zod schema requires it to be an `https:` URL on `www.apple.com` under `/shop/buy-iphone/`, and drops any entry that fails.
-    - Telegram messages are sent as plain text, without `parse_mode`, so no Apple-supplied string is ever read as markup.
+    - The buy link is `productLink` with `-unlocked` appended to its last path segment (the buy page's own `seoUrlToken` for the unlocked configuration, Constraints), stored in `parts.buy_url`; the upsert rewrites it at the next startup. One part number covers every carrier, so only the link carries Unlocked. The zod schema requires `productLink` to be an `https:` URL on `www.apple.com` under `/shop/buy-iphone/`, with no query or fragment, and drops any entry that fails.
+    - No Trade-in rides as `?igt=true` only if the implementation's hand check in Brave shows the page honours it; otherwise the link has no query. The result goes into `apple-api-notes.md`.
+    - Store and zip are not in the link: the buy page's parameter schema has no key for either (Constraints). Every store link in a message opens the same configuration page, and the store is picked there (spec.md:31).
+    - Telegram formatting is decision 25.
 
     This replaces the spec's "read from Apple's buy pages" with the JSON behind the same pages' store locator, keeping the same 40 configurations (spec.md:46).
 11. **Stores come from `pickup-message-recommendations`**, using any catalog part, because it needs no token.
@@ -160,13 +173,14 @@ The repository holds no source code, configuration or tests yet, so no explorers
     - Errors never echo the request body.
 
     Why: spec.md:63.
-18. **UI:** one page, cards in a single column at every width, polling `GET /api/state` every 5 s. Sections:
-    - status header;
-    - location (zip and store switches with distance);
-    - watches (Model → Storage → Color multi-select picker, then one card per watch with its store rows, a Today/Tomorrow/Unavailable/Not checked badge per store, the other-colors switch and remove);
-    - settings strip (Telegram status and test, token status and time left with a paste-cURL dialog, interval, Wi-Fi toggle with the LAN URL).
+18. **UI:** four views in one page, polling `GET /api/state` every 5 s as today. The view lives in `location.hash` (`#/stock`, `#/watches`, `#/stores`, `#/settings`; anything else is `#/stock`), read on load and on `hashchange`, so refresh and back work with no router library.
+    - Shell: at `md` (768 px) and wider, a fixed sidebar with the four views plus health and token status chips; below `md`, a top bar with the chips and a fixed bottom tab bar with four icon-and-label tabs. The active view is marked, and only that view renders.
+    - **Stock board** (home): last successful check and health at the top, then one block per model + storage of the tracked parts, one row per color × enabled store with its Today / Tomorrow / Unavailable / Not checked badge and distance, in-stock rows first, "Other color" rows marked. In-stock store names link to the buy URL.
+    - **Watches:** the Model → Storage → Color picker, "N / 20 parts tracked", and one compact row per watch with its other-colors switch and remove; the per-store badges move to the stock board.
+    - **Stores:** zip form and store switches with distance.
+    - **Settings:** Telegram status and test, token status and time left with the paste-cURL dialog, interval, Wi-Fi toggle with the LAN URL.
 
-    Why: 12 stores cannot fit as columns at 375 px, and checks run once a minute. Principle: principle-smallest-change
+    Why: the owner uses the Mac and the phone equally and checks stock most (spec.md:35, 69-71), and a hash keeps the one-process static serving unchanged. Principle: principle-smallest-change
 19. **One command:** `npm start` runs `vite build` and then `tsx src/server/index.ts`, which serves `dist/` and `/api`. `npm run dev` runs Vite's dev server with `/api` proxied to `127.0.0.1`.
 20. **Fixtures hold Apple response bodies only**, captured with `scripts/capture-fixtures.ts`, which writes bodies and never request headers. Why: requests carry the owner's cookies.
 21. **Token expiry warning and known-expiry down:**
@@ -181,6 +195,17 @@ The repository holds no source code, configuration or tests yet, so no explorers
 
     Why: a dead process sends no down alert, and silence must not look like no stock (spec.md:101).
 23. **Secrets at rest:** at boot, `index.ts` creates `data/` with mode 0700 and the db file with 0600. The README setup says to `chmod 600 .env`. Why: the db holds the Apple cookie pair and `.env` the bot token.
+24. **Parts cap of 20:** `trackedParts(watches, catalog)` in `domain.ts` returns the distinct parts of the tracked set (watched plus other colors, decision 4), and the check's part list is built from it.
+    - `POST /api/watches` and turning a watch's other-colors switch on compute the count the change would give. Above 20, the route writes nothing and answers 409 `{error: 'parts-cap', cap: 20, tracked, adding}`. The page shows "Adds <adding> parts; <tracked> / 20 tracked" and keeps the picker's selection.
+    - `StateDto` carries `parts: {tracked, cap}` for the Watches view.
+    - Removing a watch, turning the switch off and saving a zip never hit the cap.
+    - Why: Apple answers at most 20 parts per request, the owner accepted 20 (spec.md:25, 55), and a refusal drops nothing the owner set up.
+25. **Telegram messages are HTML** (`parse_mode: 'HTML'`), the owner's formatting preference (spec.md Facts), over MarkdownV2, which needs 18 characters escaped instead of 3.
+    - `telegram.ts` builds every message. Each Apple- or db-supplied string (model, capacity, color, store name, pickup label, cause) goes through one `escapeHtml` (`&`, `<`, `>`, `"`). Every `href` is a `parts.buy_url` already checked by decision 10, escaped the same way. No other tags than `<b>` and `<a href>` are emitted.
+    - Stock message: `<b>📱 iPhone 18 Pro Max 256GB</b>`, then per color `<b>Black</b>` (or `<b>Glacier</b> · Other color`), then `🟢 Today:` and `🟡 Tomorrow:` lines of store links with distance, `🆕` before a new store, `🔴 Gone: Black at Fifth Avenue, …` when stores went out, and `🔴 Sold out everywhere` when no color is left. No inline button.
+    - Other messages: `🚨 <b>Monitoring is down</b>`, `✅ <b>Back up</b>`, `⏳ <b>Token expiring</b>`, `▶️ <b>Monitor started</b>`, `🧪 <b>Test message</b>`, each with the current text as the body.
+    - The worst case (4 colors × 12 stores, the longest store names) stays under Telegram's 4096-character limit, and a test asserts it.
+    - Why: spec.md:29, 34, 63, and Apple text must never be read as markup.
 
 ## Data shapes
 
@@ -208,6 +233,20 @@ type Observation = { part: PartNumber; store: StoreNumber; pickup: Pickup }
 
 type StockEvent = { kind: 'in' | 'out'; pair: TrackedPair; label?: string }
 
+// One Telegram message per model + storage with events in a check (decision 6)
+type StockMessage = {
+  group: { modelName: string; capacity: string }
+  sound: boolean                                  // at least one 'in' event
+  colors: {                                       // in stock now; empty means sold out everywhere
+    colorName: string
+    role: 'watched' | 'other'
+    buyUrl: string
+    stores: { store: StoreNumber; name: string; distanceMi: number; label: string; isNew: boolean }[]
+  }[]
+  gone: { colorName: string; storeName: string }[]
+  commit: { insert: TrackedPair[]; delete: TrackedPair[] }
+}
+
 type CheckOutcome =
   | { ok: true; observations: Observation[]; stores: { store: StoreNumber; name: string; distanceMi: number }[] }
   | { ok: false; cause: 'network' | 'token-expired' | 'token-rejected' | 'unexpected' }
@@ -223,7 +262,7 @@ SQLite (`data/pickup-watch.db`, created with `CREATE TABLE IF NOT EXISTS` at boo
 
 | Table | Columns | Notes |
 |---|---|---|
-| `parts` | `part` PK, `model_name`, `capacity`, `color_name`, `title`, `buy_url`, `sort` | Upserted, never deleted |
+| `parts` | `part` PK, `model_name`, `capacity`, `color_name`, `title`, `buy_url`, `sort` | Upserted, never deleted; `buy_url` is the unlocked link (decision 10) |
 | `stores` | `store_number` PK, `name`, `city`, `state`, `distance_mi`, `enabled` 0/1 | Replaced per zip, keeping toggles |
 | `watches` | `part` PK → `parts`, `other_colors` 0/1 default 1, `created_at` | One watch per configuration |
 | `alerted` | (`part`, `store_number`) PK | Pairs the user was last told are in stock; written only by `monitor.ts` |
@@ -243,8 +282,8 @@ Pair alert state (one per tracked pair; `in` means an `alerted` row exists):
 ```mermaid
 stateDiagram-v2
   [*] --> out
-  out --> in : observed available, still tracked / send in-stock, then insert row
-  in --> out : observed not available, still tracked / send out-of-stock, then delete row
+  out --> in : observed available, still tracked / its group's message accepted, then insert row
+  in --> out : observed not available, still tracked / its group's message accepted, then delete row
   in --> [*] : pair no longer tracked, or its part newly watched / reconcile deletes row silently
   out --> [*] : pair no longer tracked
 ```
@@ -267,9 +306,9 @@ stateDiagram-v2
 
 | Module | Owns | May call |
 |---|---|---|
-| `domain.ts` | Types' logic: `trackedPairs`, `diff`, `orderEvents`, `nextHealth`, `jitterMs`, `pickupFrom` | Nothing (pure) |
-| `apple.ts` | Every Apple URL, request and zod schema; outcome classification; cURL and `shld_bt_ck` parsing | `fetch` (or `/usr/bin/curl` if the spike forces it) |
-| `telegram.ts` | Message text and button for each event kind; `send`; classified `TelegramError` | `fetch` |
+| `domain.ts` | Types' logic: `trackedPairs`, `trackedParts`, `diff`, `stockMessages` (grouping and order, replacing `orderEvents`), `nextHealth`, `jitterMs`, `pickupFrom` | Nothing (pure) |
+| `apple.ts` | Every Apple URL, request and zod schema, including the unlocked buy link; outcome classification; cURL and `shld_bt_ck` parsing | `fetch` (or `/usr/bin/curl` if the spike forces it) |
+| `telegram.ts` | HTML text for each `StockMessage` and every other message kind, `escapeHtml`; `send` with `parse_mode` and `disable_notification`; classified `TelegramError` | `fetch` |
 | `db.ts` | Schema and every SQL statement as typed functions, including `pruneAlerted(tracked)`; opened from a path argument | `better-sqlite3` |
 | `monitor.ts` | Built by `createMonitor({apple, telegram, db, now})`. Scheduler, check cycle, send pass, health, token warning, catalog fetch at startup and retry while empty, `reconcile()`, in-memory snapshot. The only writer of `alerted` | `domain` and the injected `apple`, `telegram`, `db` |
 | `api.ts` | Hono routes, guards, DTOs. Never writes `alerted`; calls `monitor.reconcile()` after every watch, store, other-colors or zip mutation | `db`, `domain`, `apple` (zip lookup, token parsing), `telegram` (test), `monitor` (snapshot, reschedule, reconcile) |
@@ -312,12 +351,12 @@ sequenceDiagram
     M->>D: health failures + 1
     M->>T: "down" on the third, or at once on a known expiry (if not announced)
   else success
-    M->>M: snapshot for grid, diff vs alerted, order events
-    loop until deadline (first watched in-stock always) or first send failure
-      M->>D: recompute trackedPairs, skip if no longer tracked
-      M->>T: sendMessage
+    M->>M: snapshot for stock board, diff vs alerted, group into ordered StockMessages
+    loop until deadline (first message with a watched in-stock always) or first send failure
+      M->>D: recompute trackedPairs, drop untracked events, rebuild, skip if empty
+      M->>T: sendMessage (HTML, silent unless a store came in)
       T-->>M: ok
-      M->>D: transaction: still tracked? insert or delete alerted row
+      M->>D: transaction: still tracked? insert and delete the message's alerted rows
     end
     M->>T: "back up" if announced
   end
@@ -345,20 +384,23 @@ src/
     db.ts                    schema and typed queries, pruneAlerted
     domain.ts                pure logic: tracked set, diff, event order, health, jitter, pickup label
     apple.ts                 Apple requests, zod schemas, outcome classification, cURL and token parsing
-    telegram.ts              plain-text message formatting, sendMessage with inline URL button, classified errors
+    telegram.ts              HTML message formatting with escapeHtml, sendMessage with parse_mode and disable_notification, classified errors
     monitor.ts               createMonitor: scheduler, check cycle, send pass, health, token warning, catalog fetch, reconcile, snapshot
     api.ts                   Hono routes, Host/Origin/loopback guards, DTOs
   web/
     main.tsx                 React root
-    App.tsx                  page layout and 5 s state polling
+    App.tsx                  shell: hash view, sidebar (md+) or top bar and bottom tabs, status chips, 5 s state polling
     api.ts                   typed fetch helpers for /api
-    Location.tsx             zip form and store switches
-    Watches.tsx              picker and watch cards with store badges
-    SettingsStrip.tsx        Telegram, token (paste dialog), interval, Wi-Fi with LAN URL
+    StockBoard.tsx           home view: blocks per model + storage, color × store rows, in stock first
+    Stores.tsx               zip form and store switches (was Location.tsx)
+    Watches.tsx              picker, parts count, compact watch rows with other-colors switch and remove
+    Settings.tsx             Telegram, token (paste dialog), interval, Wi-Fi with LAN URL (was SettingsStrip.tsx)
+    logic.ts                 pure page logic, including the hash → view parser and the stock board's row order
     components/ui/           shadcn/ui generated components
 test/
   fixtures/                  Apple response bodies only: locator-18pro.json, locator-duo.json, stores-10001.json, fulfillment-*.json, rejected-541.html, maintenance-503.html
-  domain.test.ts             tracked set, diff, order, health, jitter, labels
+  domain.test.ts             tracked set and parts count, diff, stock messages (grouping, order, new and gone), health, jitter, labels
+  telegram.test.ts           HTML rendering of every message kind, escaping, silent flag, 4096-character worst case
   apple.test.ts              parsers on fixtures, classification, cURL and token rules, productLink check, fixture cookie guard
   monitor.test.ts            check cycle with fake Apple and Telegram over in-memory SQLite, scheduler with fake timers
   api.test.ts                routes, guards, no secrets in any response
@@ -379,20 +421,25 @@ extension/                   only if the spike picks it
 |---|---|---|
 | spec.md:46 picker lists every configuration | `apple.test.ts`, `domain.test.ts` | Locator fixtures parse to 32 + 8 parts with model, storage and color; siblings group by model and capacity; an entry with an off-domain or `javascript:` `productLink` is dropped |
 | spec.md:47 stores from zip, all on; off never alerts | `api.test.ts`, `domain.test.ts`, `monitor.test.ts` | Fake Apple stores fixture; `trackedPairs` excludes disabled stores; toggles survive a re-save of the zip; a store toggled off in the middle of a send pass gets no message and no row |
-| spec.md:48 one request, 45–75 s apart | `monitor.test.ts` | Fake Apple counts calls and asserts every tracked part in one URL; fake timers over 100 cycles assert start gaps of 45–75 s; an interval change in the middle of a cycle still gives one Apple call per period |
-| spec.md:49-50 other colors on by default, labelled, switch off stops | `domain.test.ts`, `monitor.test.ts` | New watch has `other_colors = 1`; sibling events carry role `other` and render "Other color … (you watch Black)"; switch off removes them and prunes rows; watching a color already alerted as other sends a watched alert on the next check |
-| spec.md:51 interval change without restart | `monitor.test.ts` | Fake timers; reschedule takes effect on the next start |
-| spec.md:52-54 in-stock, out-of-stock, no repeats, restart | `monitor.test.ts` | Fixture sequences out → in → in → out; message fields and button URL; a new monitor over the same db sends nothing for an unchanged pair; at the 30 s floor with a slow fake Apple, the first watched in-stock event is still sent |
-| spec.md:55 `unavailable`, `default` not in stock | `domain.test.ts` | `pickupFrom` for each value plus `ineligible` and an unknown value |
-| spec.md:56 one down after 3 failures, one back up | `monitor.test.ts`, `apple.test.ts` | Fake Apple fails with each cause; a 503 HTML fixture is `unexpected`, not a token cause; a 200 missing a watched part is `unexpected`; Telegram fails once on "down" and the retry still sends exactly one; restart between down and up; a known expiry goes down at once with one message |
-| spec.md:57 token status and cURL paste | `apple.test.ts`, `api.test.ts` | Chrome "Copy as cURL" samples with fake cookies; rejects missing, malformed, expired and far-future pairs; extension posts need a strictly newer timestamp, a pasted cURL replaces any; loopback guard; only the pinned extension origin passes; the 15 min warning is sent once and reset by a newer pair |
-| spec.md:58 spike within 1 day; extension keeps token valid | `spike/RESULT.md`; manual | Written result; with the extension, a 3 h run where the token status stays `working` |
-| spec.md:59 test message | manual | Real bot and chat |
-| spec.md:60 grid with Today/Tomorrow/unavailable and last check time | `api.test.ts` | `GET /api/state` DTO after a faked check; an enabled store absent from the response shows "Not checked" |
-| spec.md:61 375 px, no horizontal scroll | manual | Brave device toolbar at 375 px |
-| spec.md:62 localhost by default, Wi-Fi opt-in | `api.test.ts`; manual | Host allowlist and loopback guards in tests; phone on the same network after enabling and restarting |
-| spec.md:63 no secrets in responses | `api.test.ts`, `apple.test.ts` | Seed fake token and env values; call every route, including errors, and assert none of them appears; a fake Telegram error whose message holds the full bot URL does not reach `/api/state`; with the curl fallback, the spawned argv holds no cookie value |
-| spec.md:64 one command | manual | `npm start` on a clean clone |
+| spec.md:54 one request, 45–75 s apart | `monitor.test.ts` | Fake Apple counts calls and asserts every tracked part in one URL; fake timers over 100 cycles assert start gaps of 45–75 s; an interval change in the middle of a cycle still gives one Apple call per period |
+| spec.md:55 at most 20 parts, refused with count | `domain.test.ts`, `api.test.ts` | `trackedParts` counts a sibling of two watches once; a watch or switch-on that gives 21 parts gets 409 with `tracked` and `adding` and writes nothing; exactly 20 passes; `StateDto.parts` matches |
+| spec.md:56-57 other colors on by default, in the group message as "Other color", switch off stops | `domain.test.ts`, `telegram.test.ts`, `monitor.test.ts` | New watch has `other_colors = 1`; a sibling `in` lands in its group's message under its color with role `other` and renders "Other color"; switch off removes it and prunes rows; watching a color already alerted as other lists it as watched on the next message |
+| spec.md:58 interval change without restart | `monitor.test.ts` | Fake timers; reschedule takes effect on the next start |
+| spec.md:59-60, 62 grouped in / out messages, sound, no repeats, restart, day label | `domain.test.ts`, `monitor.test.ts` | Two colors coming in at 3 stores in one check send one message with both colors, `isNew` on the 3, sound on; a later 4th store sends one message listing all 4 with only the 4th new; stores only going out send one silent message with `gone` and the rest; the last going out says sold out; a failed send commits none of the message's rows and the next check resends it rebuilt; a new monitor over the same db sends nothing for unchanged pairs; Tomorrow → Today alone sends nothing; at the 30 s floor with a slow fake Apple, the first watched in-stock message is still sent |
+| spec.md:61 buy links preselect what Apple's URL supports | `apple.test.ts`; manual | Locator fixture links end in `-unlocked` and keep the domain check; an entry with a query or fragment is dropped; by hand in Brave: the link opens with color and Unlocked selected, and `igt=true` is kept only if it selects No trade-in |
+| spec.md:63 other messages styled | `telegram.test.ts` | Down, up, token expiring, started and test messages each start with their emoji and `<b>` heading |
+| spec.md:64 `unavailable`, `default` not in stock | `domain.test.ts` | `pickupFrom` for each value plus `ineligible` and an unknown value |
+| spec.md:65 one down after 3 failures, one back up | `monitor.test.ts`, `apple.test.ts` | Fake Apple fails with each cause; a 503 HTML fixture is `unexpected`, not a token cause; a 200 missing a watched part is `unexpected`; Telegram fails once on "down" and the retry still sends exactly one; restart between down and up; a known expiry goes down at once with one message |
+| spec.md:66 token status and cURL paste | `apple.test.ts`, `api.test.ts` | Chrome "Copy as cURL" samples with fake cookies; rejects missing, malformed, expired and far-future pairs; extension posts need a strictly newer timestamp, a pasted cURL replaces any; loopback guard; only the pinned extension origin passes; the 15 min warning is sent once and reset by a newer pair |
+| spec.md:67 spike within 1 day; extension keeps token valid | `spike/RESULT.md`; manual | Written result; with the extension, a 3 h run where the token status stays `working` |
+| spec.md:68 test message | manual | Real bot and chat |
+| spec.md:69 stock board with Today/Tomorrow/unavailable, in stock first, last check time | `api.test.ts`, `web-logic.test.ts` | `GET /api/state` DTO after a faked check; an enabled store absent from the response shows "Not checked"; the board's row order puts in-stock rows first |
+| spec.md:70 four views, sidebar or bottom tabs, refresh and back | `web-logic.test.ts`; manual | The hash parser maps each hash and falls back to `#/stock`; by hand: sidebar at 1280 px, bottom tabs at 375 px, refresh and back keep the view |
+| spec.md:71 375 px, no horizontal scroll | manual | Brave device toolbar at 375 px, every view |
+| spec.md:72 localhost by default, Wi-Fi opt-in | `api.test.ts`; manual | Host allowlist and loopback guards in tests; phone on the same network after enabling and restarting |
+| spec.md:73 no secrets in responses | `api.test.ts`, `apple.test.ts` | Seed fake token and env values; call every route, including errors, and assert none of them appears; a fake Telegram error whose message holds the full bot URL does not reach `/api/state`; with the curl fallback, the spawned argv holds no cookie value |
+| spec.md:74 one command | manual | `npm start` on a clean clone |
+| escaping (decision 25) | `telegram.test.ts` | A store name or label holding `<b>`, `&` and `"` renders literally; the message's only tags are `<b>` and `<a href>` |
 
 Fixture guard: `apple.test.ts` fails if any fixture contains `dssid2=`, `shld_bt_ck=` or a `Set-Cookie` line.
 
@@ -401,9 +448,12 @@ Fixture guard: `apple.test.ts` fails if any fixture contains `dssid2=`, `shld_bt
 - **No automated token source works** (medium): the extension is the planned route. Until it exists, a pasted pair lasts at most 2 h; the owner gets a warning 15 min before expiry and a down alert at once when it passes (decision 21).
 - **Node's `fetch` is rejected where curl and the browser were accepted** (unknown; TLS fingerprinting): spike step 1 replays the pair from Node with a curl control. If only curl passes, `apple.ts` calls `/usr/bin/curl` through `execFile`. The cookie and User-Agent headers go to curl on stdin with `--config -`, so only the URL is in argv. The execFile error object is never logged, only its mapped cause.
 - **A tab opened by the extension does not get a fresh accepted pair** (unknown): spike step 5 checks it by hand. If not, the extension still forwards pairs from the owner's normal browsing, and the README says to keep an apple.com tab open.
-- **Apple caps parts per request** (unknown; 3 tested): spike step 2 sends all 40 parts. A cap below the tracked count breaks the one-request criterion and goes back to the owner. A silent truncation shows up as `unexpected` (decision 8).
+- **Apple caps parts per request** (settled: 20): the cap of decision 24 keeps the request within it. If Apple lowers it, the truncation shows up as `unexpected` (decision 8).
+- **The buy page ignores the `-unlocked` suffix or `igt`** (unknown until the hand check): the link still opens the configuration's page, as before; `igt` is dropped unless it works.
+- **HTML formatting breaks a message** (low): a string that slips past `escapeHtml` makes Telegram answer 400 and the pass stops, so the group's rows stay uncommitted and the message retries each check without arriving. The escaping test covers every interpolated field, and the 400's `description` reaches `lastError` on the page.
+- **Grouping delays a watched alert** (low): a group's message waits for nothing but its place in the order; groups with a watched in-stock event go first, as single events did.
 - **Apple blocks the session or IP at a 60 s rate** (medium): health reports it within about 3 minutes, and the interval can be raised. A block may also refuse the owner's own checkout from that IP; the README says to check out from the phone on cellular.
-- **`?location=` in the buy link is not honoured** (unknown): checked by hand in Brave during implementation; when it isn't honoured, the link stays without it.
+- **No store or zip in the buy link** (settled): the page's parameter schema has no key for either, so every store link in a message opens the same page (decision 10).
 - **Apple changes JSON shapes or routes** (low per week, high over months): zod failures become `unexpected` and reach the down alert; the stored catalog keeps the picker working.
 - **First-start burst hits Telegram's limit** (medium): decision 6 paces, orders and bounds the send pass.
 - **Wi-Fi access without login** (opt-in, accepted by the owner): while it is on, any device on the network can read the state and change watches, stores, zip and interval, and could silently switch off a watch. The token and the Wi-Fi switch stay Mac-only.
@@ -432,6 +482,8 @@ Order of work against the 2026-11-01 deadline (spec.md, Facts), riskiest piece f
 5. Manual checks (375 px, phone over Wi-Fi, test message, `?location=` link), then a sustained live run toward the success measure.
 
 The db file must survive upgrades: deleting it re-alerts every pair in stock.
+
+Changes 1, 2, 4 and 5 (2026-10-23, `changes.md`) need no migration: the alerted set keeps its meaning, so pairs already alerted stay quiet until they change, and `parts.buy_url` is rewritten by the catalog upsert at the next start.
 
 ## Facts
 - The alerts must be working by 2026-11-01 (spec.md)
@@ -536,3 +588,8 @@ Stale: after the review, the owner chose open Wi-Fi access over security-1's LAN
 - 2026-10-23: Rejected lazy-boi-3: drop the capture script, three columns and most diagrams. Why: mostly taste on tiny items; diagrams are documentation, not code, `sort` keeps Apple's order, which capacity strings like "1tb" vs "256gb" can't reproduce in SQL, and the capture script is a few lines that enforce the bodies-only rule. Principle: principle-smallest-change
 - 2026-10-23: Rejected code-purist-3: rename one of the two `api.ts` files. Why: taste; two `api.ts` files in separate `server/` and `web/` folders cause no functional or ownership problem.
 - 2026-10-23: Rejected staff-engineer-3: add a versioned migration runner. Why: not worth it at this stage; no schema change is planned, and a migration runner can wait for the first one, so only the risk that deleting the db re-alerts every in-stock pair needs recording.
+- 2026-10-23: Amended: the send pass groups events into one `StockMessage` per model + storage, listing every in-stock store per color with new ones marked and gone ones named, silent unless a store came in, committing all its rows on acceptance. Why: change 1 (user, walkthrough 2026-10-23). Principle: principle-model-the-domain
+- 2026-10-23: Amended: Telegram messages are HTML with one `escapeHtml` and only `<b>` and `<a href>`, over MarkdownV2; every message kind gets an emoji and bold heading. Why: change 1 (user, 2026-10-23); HTML needs 3 escapes instead of 18.
+- 2026-10-23: Amended: buy links append `-unlocked` to `productLink`, add `igt=true` only if a hand check shows it works, and carry no store or zip. Why: change 2 (user, 2026-10-23); the buy page's `seoUrlToken` carries the carrier, and its parameter schema has no store or zip key.
+- 2026-10-23: Amended: the page becomes four hash-routed views with a sidebar at md and wider and bottom tabs below, the stock board as home. Why: change 4 (user, 2026-10-23); no router library, and static serving stays as it is. Principle: principle-smallest-change
+- 2026-10-23: Amended: at most 20 tracked parts, checked by `trackedParts` in the watch and other-colors routes with a 409 that writes nothing. Why: change 5 (user, 2026-10-23); Apple answers at most 20 parts per request.
