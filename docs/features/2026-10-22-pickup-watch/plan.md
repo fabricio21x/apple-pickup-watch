@@ -54,9 +54,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:47 (off never alerts), 49–50 (other-color messages), 52–55 (in-stock, out-of-stock, no repeats incl. restart)
 - Files: `src/server/db.ts`, `src/server/telegram.ts`, `src/server/monitor.ts`, `test/monitor.test.ts`
 - Depends on: T5
-- Status: todo
-- Review:
-- Notes: Covers design.md decisions 2–6, 8 (store/part missing handling), 10 (catalog fetch and retry), reconcile and the in-memory snapshot.
+- Status: done
+- Review: request-changes (send pass ignored role, so a watch created mid-pass let a stale "Other color" alert through and lost the watched alert), then approve-with-comments; 1 fix round
+- Notes: Non-blocking: an `out` event whose role flips mid-send keeps its row and repeats next check (src/server/monitor.ts:90); no test proves the 10 s Telegram timeout is applied (src/server/telegram.ts:60); `res.body?.cancel()` can reject outside a try and throw out of `sendMessage` (src/server/telegram.ts:67); other-color text uses related colors from diff time (src/server/monitor.ts:76); partial catalog upserts renumber `sort` (src/server/db.ts:126). Deviations: `createMonitor({apple, telegram, db, now, sleep?})` → `{runCheck({deadline?}), reconcile({newlyWatched?}), loadCatalog(), snapshot()}`; the API must call `reconcile({newlyWatched:[part]})` after `db.addWatch`; `sendMessage` returns a result with `retryAfterSec` instead of throwing; out-of-stock messages carry no button; `getSettings()` exposes only zip and token so far. Covers design.md decisions 2–6, 8 (store/part missing handling), 10 (catalog fetch and retry), reconcile and the in-memory snapshot.
 
 ### T7: Scheduler
 - Serves: spec.md:48 (one request, 45–75 s apart), 51 (interval change without restart)
