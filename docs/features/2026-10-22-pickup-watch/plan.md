@@ -30,9 +30,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: setup for spec.md:46, 47, 55, 56 (design.md decision 20, Test seams fixture list)
 - Files: `scripts/capture-fixtures.ts`, `test/fixtures/*`
 - Depends on: T1
-- Status: todo
-- Review:
-- Notes: The token-free bodies (locator, stores, rejected-541) are captured live. `fulfillment-*.json` need the owner's cookie pair, so they are built in the shape of apple-api-notes.md:21-26 until `npm run capture` is run with a pasted token; `maintenance-503.html` is a written HTML body.
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: a non-541 reply still overwrites `rejected-541.html` (scripts/capture-fixtures.ts:87); a live capture requests different parts from the hand-built set (scripts/capture-fixtures.ts:80); the cURL parser misses `$'…'` quoting, matches flags case-insensitively, and one error path can print the cookie to the owner's terminal (scripts/capture-fixtures.ts:44, 102); hand-built titles use plain spaces where Apple uses NBSP (test/fixtures/fulfillment-today.json:23), so names must come from the catalog. Hand-built `fulfillment-*`: all-out, today, tomorrow, other-color-today, duo-check-back, missing-part, missing-store; live capture goes to `fulfillment-live.json`. The token-free bodies (locator, stores, rejected-541) are captured live. `fulfillment-*.json` need the owner's cookie pair, so they are built in the shape of apple-api-notes.md:21-26 until `npm run capture` is run with a pasted token; `maintenance-503.html` is a written HTML body.
 
 ### T4: Domain logic
 - Serves: spec.md:46 (siblings), 47 (disabled stores never tracked), 48 (jitter), 49–50 (other colors), 55 (`unavailable`/`default` not in stock)
