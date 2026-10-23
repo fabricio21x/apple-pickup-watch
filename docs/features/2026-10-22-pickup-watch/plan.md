@@ -110,9 +110,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: "the user can paste a cURL from their browser to replace it" (spec.md:57), 375 px usable (spec.md:61). Owner's walkthrough 2026-10-23: a long paste grows the textarea and pushes the Save button out of reach.
 - Files: `src/web/SettingsStrip.tsx` (and `src/web/components/ui/textarea.tsx` / `dialog.tsx` only if needed)
 - Depends on: T10
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: the textarea can still be dragged taller by hand (src/web/SettingsStrip.tsx:129, add `resize-none`); `DialogContent` has no max height, so viewports under ~420 px tall clip it (src/web/components/ui/dialog.tsx:64); `text-xs` under 16 px makes iOS Safari zoom on focus (src/web/SettingsStrip.tsx:129). Verified in Chromium at 375×667: the textarea stays 160 px with a 17.5 KB paste, no horizontal scroll, and Save and the rejection reason stay in view. Deviation: field sizing is overridden on this textarea, not in the shared component.
 
 ## Final review
 - Status: todo
