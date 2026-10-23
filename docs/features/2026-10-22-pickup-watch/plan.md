@@ -102,7 +102,7 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:58 (written result; the extension keeps the token valid while Brave is open)
 - Files: `spike/RESULT.md`, and `extension/manifest.json` + `extension/background.js` or `scripts/token-auto.ts` (with its `token:auto` script), as the result decides
 - Depends on: T2, T9, and the owner's spike run (design.md Rollout step 1)
-- Status: todo
+- Status: blocked
 - Review:
 - Notes:
 
@@ -112,4 +112,4 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Notes:
 
 ## Escalations
-None
+- T12 blocked (2026-10-23): the owner has not run the token spike yet (no `spike/out/`). Needs the spike outcome: which variant, if any, kept a pair accepted for 2+ h unattended, plus the replay and parts-cap results for `spike/RESULT.md`. Resume with `/fbs:implement pickup-watch` once it is run. Cleanup and the final review wait for T12.
