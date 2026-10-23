@@ -70,9 +70,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:56 (one down after 3 failures, one back up), 57 (token status), design.md decisions 9, 21, 22 (startup message)
 - Files: `src/server/monitor.ts`, `src/server/telegram.ts`, `src/server/db.ts`, `test/monitor.test.ts`
 - Depends on: T7
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: the "goes down at once" test would pass without the at-once branch (test/monitor.test.ts:668; the single-check expired test proves it); the startup message is sent alongside the first cycle, skipping the 1.1 s gap (src/server/monitor.ts:242); `start()` after `stop()` sends another startup message (src/server/monitor.ts:239); `setToken` resets `token_warned` even for the same pair (src/server/db.ts:121), so the API must not re-store an unchanged pair. Deviations: snapshot gains `token: {status, expiresAt}` and `health: {failures, downAnnounced, cause}`; the startup message is fire-and-forget and not retried; an expired stored token shows `expired` at once; the warning is sent only while 0 < time left ≤ 15 min; expiry time shown as server-local `HH:MM`.
 
 ### T9: HTTP API
 - Serves: spec.md:47 (zip save keeps toggles), 57 (token status, cURL paste), 59 (test message route), 60 (grid DTO), 62 (Host and loopback guards), 63 (no secrets in any response)
