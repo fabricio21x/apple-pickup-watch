@@ -14,9 +14,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: setup (design.md decisions 1, 15; Data shapes)
 - Files: `package.json` (scripts `start`, `dev`, `test`, `capture`, plus server, test and spike dependencies incl. Playwright as a dev dependency, so T2–T4 never touch it), `tsconfig.json`, `.gitignore`, `.env.example`, `src/shared/types.ts`
 - Depends on: none
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: `GridCell.badge` copies design.md:215 verbatim and widens to `string` (src/shared/types.ts:34); one tsconfig gives server code the DOM lib (tsconfig.json:4), worth splitting when the page lands. Deviations: resolved majors are typescript 7, vitest 5, zod 4, better-sqlite3 13; `noUncheckedIndexedAccess` added; Playwright's Chromium needs `npx playwright install chromium` before the spike.
 
 ### T2: Token spike script
 - Serves: "The token spike ends within 1 day with a written result" (spec.md:58; design.md Rollout step 1.1–1.5, including the plain Telegram send for an env list of parts)
