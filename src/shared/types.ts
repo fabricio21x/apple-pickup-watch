@@ -37,3 +37,34 @@ export type GridCell = {
 export type TokenStatus = 'missing' | 'untested' | 'working' | 'rejected' | 'expired'
 
 export type TelegramError = { kind: 'network' | 'timeout' | 'http'; status?: number; description?: string }
+
+export type StoreDto = {
+  store: StoreNumber
+  name: string
+  city: string
+  state: string
+  distanceMi: number
+  enabled: boolean
+}
+
+export type WatchDto = { part: PartNumber; otherColors: boolean; cells: GridCell[] }
+
+export type HealthDto = {
+  status: 'healthy' | 'failing' | 'down'
+  failures: number
+  cause: Extract<CheckOutcome, { ok: false }>['cause'] | null
+}
+
+export type StateDto = {
+  zip: string | null
+  stores: StoreDto[]
+  parts: CatalogPart[]
+  watches: WatchDto[]
+  lastCheckAt: number | null
+  lastSuccessAt: number | null
+  intervalSec: number
+  lan: { enabled: boolean; restartRequired: boolean; urls: string[] }
+  token: { status: TokenStatus; expiresAt: number | null }
+  telegram: { configured: boolean; lastError: TelegramError | null }
+  health: HealthDto
+}

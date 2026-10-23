@@ -4,7 +4,13 @@ import type { AppleToken, StoreInfo } from './apple'
 import type { AlertedRow, FailureCause, HealthState, Watch } from './domain'
 
 export type StoreRow = StoreInfo & { enabled: boolean }
-export type Settings = { zip: string | null; token: AppleToken | null; tokenWarned: boolean; intervalSec: number }
+export type Settings = {
+  zip: string | null
+  token: AppleToken | null
+  tokenWarned: boolean
+  intervalSec: number
+  lanEnabled: boolean
+}
 export type Health = HealthState & { cause: FailureCause | null }
 
 const SCHEMA = `
@@ -78,6 +84,7 @@ type SettingsDbRow = {
   token_expires_at: number | null
   token_warned: number
   interval_sec: number
+  lan_enabled: number
 }
 type HealthDbRow = { health_failures: number; health_down_announced: number; health_cause: FailureCause | null }
 
@@ -113,10 +120,11 @@ export function openDb(path: string) {
   const deleteAlertedForPart = conn.prepare('DELETE FROM alerted WHERE part = ?')
 
   const selectSettings = conn.prepare<[], SettingsDbRow>(
-    'SELECT zip, token_dssid2, token_shld, token_ua, token_expires_at, token_warned, interval_sec FROM settings WHERE id = 1',
+    'SELECT zip, token_dssid2, token_shld, token_ua, token_expires_at, token_warned, interval_sec, lan_enabled FROM settings WHERE id = 1',
   )
   const updateZip = conn.prepare('UPDATE settings SET zip = ? WHERE id = 1')
   const updateIntervalSec = conn.prepare('UPDATE settings SET interval_sec = ? WHERE id = 1')
+  const updateLanEnabled = conn.prepare('UPDATE settings SET lan_enabled = ? WHERE id = 1')
   const updateToken = conn.prepare(
     'UPDATE settings SET token_dssid2 = ?, token_shld = ?, token_ua = ?, token_expires_at = ?, token_warned = 0 WHERE id = 1',
   )
@@ -213,13 +221,22 @@ export function openDb(path: string) {
         token_dssid2 !== null && token_shld !== null && token_ua !== null && token_expires_at !== null
           ? { dssid2: token_dssid2, shldBtCk: token_shld, userAgent: token_ua, expiresAt: token_expires_at }
           : null
-      return { zip: row.zip, token, tokenWarned: row.token_warned === 1, intervalSec: row.interval_sec }
+      return {
+        zip: row.zip,
+        token,
+        tokenWarned: row.token_warned === 1,
+        intervalSec: row.interval_sec,
+        lanEnabled: row.lan_enabled === 1,
+      }
     },
     setZip(zip: string | null): void {
       updateZip.run(zip)
     },
     setIntervalSec(sec: number): void {
       updateIntervalSec.run(sec)
+    },
+    setLanEnabled(enabled: boolean): void {
+      updateLanEnabled.run(enabled ? 1 : 0)
     },
     setToken(token: AppleToken): void {
       updateToken.run(token.dssid2, token.shldBtCk, token.userAgent, token.expiresAt)
