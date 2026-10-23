@@ -86,9 +86,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:46 (picker), 47 (zip and store toggles), 49 (other-colors switch), 51 (interval), 57 (token status and paste dialog), 59 (test button), 60 (grid), 61 (375 px), 62 (Wi-Fi toggle and LAN URL)
 - Files: `vite.config.ts`, `components.json`, `index.html`, `src/web/**`, `package.json` (page dependencies)
 - Depends on: T9
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: a long Apple quote in a `nowrap` badge can widen a store row at 375 px (src/web/Watches.tsx:102); overlapping polls can briefly undo a just-made change (src/web/App.tsx:23); the picker clears its selection even when creating watches failed (src/web/Watches.tsx:37); the interval input never re-syncs from the server (src/web/SettingsStrip.tsx:149); App.tsx exports `formatTime`, creating an import cycle and disabling fast refresh (src/web/App.tsx:15); `vite.config.ts` is outside `tsconfig` `include` (tsconfig.json:17); any failed state fetch shows "Cannot reach the monitor", even a 403 (src/web/App.tsx:27). Deviations: extra files `src/web/logic.ts` (tested pure logic), `src/web/vite-env.d.ts`, `src/web/lib/utils.ts`; `vitest.config.ts` merged into `vite.config.ts`; the picker is a checkbox tree; no "next check" shown; light theme only; remove has no confirmation.
 
 ### T11: Boot, one command and LaunchAgent
 - Serves: spec.md:62 (bind 127.0.0.1, 0.0.0.0 when LAN is on), 64 (one command), design.md decisions 19, 22, 23
