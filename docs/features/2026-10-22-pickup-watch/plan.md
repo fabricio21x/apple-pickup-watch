@@ -60,11 +60,11 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 
 ### T7: Scheduler
 - Serves: spec.md:48 (one request, 45–75 s apart), 51 (interval change without restart)
-- Files: `src/server/monitor.ts`, `test/monitor.test.ts`
+- Files: `src/server/monitor.ts`, `test/monitor.test.ts`, `src/server/db.ts` (interval accessors)
 - Depends on: T6
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: request-changes (the deadline test passed without the deadline), then approve-with-comments; 1 fix round
+- Notes: Non-blocking: a mid-cycle interval decrease leaves the running pass on the old deadline (src/server/monitor.ts:149); `stop()` during a check keeps `nextStartAt` until it ends (src/server/monitor.ts:179); `start()` after `stop()` checks at once (src/server/monitor.ts:173); one test asserts only `startTimes.slice(0, 3)` (test/monitor.test.ts:839). Deviations: `monitor.setInterval(sec)` is the one place that validates 30–3600 (integer) and throws `RangeError`, so the API maps it to 400; `start()` checks at once; a mid-cycle change jitters from the cycle start; a thrown check re-arms and surfaces as an unhandled rejection (decision 22).
 
 ### T8: Health, token warning and startup message
 - Serves: spec.md:56 (one down after 3 failures, one back up), 57 (token status), design.md decisions 9, 21, 22 (startup message)
