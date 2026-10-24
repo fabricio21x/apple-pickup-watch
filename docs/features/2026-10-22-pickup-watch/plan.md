@@ -165,9 +165,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:29 (stores grouped Today and Tomorrow as plain text with their distance), 59, 60; design.md decision 25. Change C7 (walkthrough to-do 1a).
 - Files: `src/server/telegram.ts` (each store, and each gone store, on its own line under its heading instead of comma-separated), `test/telegram.test.ts` (layout and the 4096-character worst case, now with a Gone line too)
 - Depends on: none
-- Status: todo
-- Review:
-- Notes: Owner asked for it after seeing the live message; more lines, easier to read.
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Owner asked for it after seeing the live message; more lines, easier to read. Non-blocking: the 4096 test now covers 4 colors × 11 in stock plus 1 gone each, and no longer asserts the design's 4 × 12 case (test/telegram.test.ts:221; it fits by hand count, 3787); with ~60-character store names a check where 44 stores go out at once would reach about 4126 and be refused by Telegram (src/server/telegram.ts:43; Apple's real names are much shorter; same accepted risk as T17); design.md decision 25's example and T17's deviation note still show the comma layout (wording only, the design's hash is kept). Deviations: two commits, the second fixing a test line offset; the app was restarted after 26de8a2, so live messages use the new layout.
 
 ### T21: Clear Wi-Fi restart notice
 - Serves: spec.md:72 (reachable from the phone after enabling the Wi-Fi opt-in); design.md decision 16 (the toggle applies on restart and the page says so). Change C8 (walkthrough to-do 5a).

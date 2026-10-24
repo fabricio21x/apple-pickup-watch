@@ -57,7 +57,7 @@
 - Source: user, walkthrough (walkthrough-2026-10-24.md, to-do 1a)
 - Words: it works well, just that I think we can improve the format in the message to have 1 store per line so it reads better instead of just comma separated, I know it occupies more space but it looks way better and easier to digest
 - Level: build (spec.md:29 says stores "grouped Today and Tomorrow as plain text with their distance"; design decision 25 says "lines of store names with distance" without fixing the separator; T17 chose comma-separated)
-- Status: planned
+- Status: done
 - Outcome: build level, no document change; task T20 in plan.md. Final review and validation rerun after it.
 
 ## C8: Wi-Fi access restart is easy to miss
