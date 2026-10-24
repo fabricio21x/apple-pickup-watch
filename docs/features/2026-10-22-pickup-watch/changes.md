@@ -51,3 +51,11 @@
 - Level: build (design.md Data shapes: `WatchDto.cells` holds "its GridCells for the stock board", and `GridCell` carries `part`, so a watch's cells can include its other-color pairs with no new field)
 - Status: done
 - Outcome: build level, no document change; task T19 in plan.md.
+
+## C7: One store per line in the stock message
+- Date: 2026-10-24
+- Source: user, walkthrough (walkthrough-2026-10-24.md, to-do 1a)
+- Words: it works well, just that I think we can improve the format in the message to have 1 store per line so it reads better instead of just comma separated, I know it occupies more space but it looks way better and easier to digest
+- Level: build (spec.md:29 says stores "grouped Today and Tomorrow as plain text with their distance"; design decision 25 says "lines of store names with distance" without fixing the separator; T17 chose comma-separated)
+- Status: open
+- Outcome: pending
