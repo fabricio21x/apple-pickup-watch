@@ -169,6 +169,14 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Review:
 - Notes: Owner asked for it after seeing the live message; more lines, easier to read.
 
+### T21: Clear Wi-Fi restart notice
+- Serves: spec.md:72 (reachable from the phone after enabling the Wi-Fi opt-in); design.md decision 16 (the toggle applies on restart and the page says so). Change C8 (walkthrough to-do 5a).
+- Files: `src/web/Settings.tsx` (while `lan.restartRequired`, a prominent notice and the network addresses shown as "available after restart", not as links), `src/web/logic.ts` and `test/web-logic.test.ts` only if a pure helper is worth testing
+- Depends on: none
+- Status: todo
+- Review:
+- Notes: The owner turned Wi-Fi access on and the other devices couldn't load the page, because the server hadn't been restarted.
+
 ## Final review
 - Status: done
 - Review: approve-with-comments, 0 fix rounds (range 7a85437..1a63282; 411 tests pass, type check clean)

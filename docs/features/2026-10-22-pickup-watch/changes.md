@@ -59,3 +59,11 @@
 - Level: build (spec.md:29 says stores "grouped Today and Tomorrow as plain text with their distance"; design decision 25 says "lines of store names with distance" without fixing the separator; T17 chose comma-separated)
 - Status: planned
 - Outcome: build level, no document change; task T20 in plan.md. Final review and validation rerun after it.
+
+## C8: Wi-Fi access restart is easy to miss
+- Date: 2026-10-24
+- Source: user, walkthrough (walkthrough-2026-10-24.md, to-do 5a)
+- Words: only thing. I notice is that wifi access does not load in my other network devices
+- Level: build (design decision 16: the Wi-Fi toggle saves the setting and the page says "restart to apply"; spec.md:72 holds once restarted, verified 2026-10-24: 200 from 192.168.18.75 and fabricios-macbook.local after the restart). The hint at src/web/Settings.tsx:189-191 is small muted text, and :192-197 lists the LAN URLs as live links before the restart.
+- Status: planned
+- Outcome: build level, no document change; task T21 in plan.md. The owner chose to build it now.
