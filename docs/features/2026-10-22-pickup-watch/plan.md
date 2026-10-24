@@ -162,9 +162,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Notes: Also folded in T18's r-1 (banner clears on view change) and r-2 (one exported `isInStock`). Non-blocking: nothing tests the banner clearing (src/web/App.tsx:51; no component tests in the project). Deviations: over-cap siblings are left out of `cells` and shown as "Not checked" only from `partsCount.unchecked`; the old "12 cells" assertion now counts only the watched part's cells.
 
 ## Final review
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds (range 7a85437..1a63282; 411 tests pass, type check clean)
+- Notes: Criteria met by code and tests: spec.md:52-66, 69, 73. Partly verified or unverified, manual by design: 61 (live buy-link tap; the Brave check is in T14), 67 (no 3 h unattended run of token:auto itself), 68 (real Telegram delivery), 70-71 (real layouts at 375 px and wide; Playwright checks in T18), 72 (phone over Wi-Fi), 74 (`npm start` on a clean clone). Non-blocking: README.md:55 and :83 still say "settings strip" instead of the Settings view and the toggle's label; the fatal handler logs only `err.name`, so under launchd a port clash or bad env restarts silently (src/server/index.ts:15, open since T11); a color whose only stores are "not checked" still gets a Buy button (src/server/telegram.ts:48); a later accepted health, warning or start message clears a stock-message refusal from `lastError` (src/server/monitor.ts:162); `EXTENSION_ID` remains in .env.example, boot.ts and the Origin guard though no extension was built (.env.example:4); the 4096-character test has no Gone line (test/telegram.test.ts:196). Cleanup: unslop removed unused UI-kit exports (3b9531f); no-comments removed one narrating comment and shortened the token-auto header, restoring the cookie-clearing why at its line (1a63282).
 
 ## Escalations
 - Resolved (2026-10-24): the owner ran the token spike; the result is in T12's notes, and T12 is unblocked.
