@@ -125,7 +125,7 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 ### T15: Cap tracked parts at 20
 - Serves: spec.md:54 (one request), 55 (cap, refusal with count); design.md decision 24, decision 5 (re-posting a watched part is a no-op). Change C5.
 - Files: `src/server/domain.ts` (`trackedParts`, watched first), `src/server/monitor.ts` (part list cut at 20), `src/server/api.ts` (409 `parts-cap` on watch create and other-colors on, ignoring already-watched parts), `src/shared/types.ts` (`StateDto.partsCount`), `test/domain.test.ts`, `test/monitor.test.ts`, `test/api.test.ts`
-- Depends on: T14
+- Depends on: none (shares no file with T14, which waits on the owner's `igt` check)
 - Status: todo
 - Review:
 - Notes:
