@@ -102,9 +102,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:58 (written result; the extension keeps the token valid while Brave is open)
 - Files: `spike/RESULT.md`, and `extension/manifest.json` + `extension/background.js` or `scripts/token-auto.ts` (with its `token:auto` script), as the result decides
 - Depends on: T2, T9, and the owner's spike run (design.md Rollout step 1)
-- Status: blocked
+- Status: todo
 - Review:
-- Notes:
+- Notes: Spike outcome (2026-10-23/24): replay from Node fetch and curl both 200; Apple answers at most 20 parts per request; Playwright Chromium rejected (541); CDP into Brave with a dedicated profile kept a working pair 3 h unattended (rounds at 0, 90 and 180 min all 200). Renewal probes: a page load renews `shld_bt_ck` only once it has expired (10 loads from 31 to 3 min left renewed nothing; the first load after expiry did), but deleting `shld_bt_ck` and reloading issues a fresh accepted pair at any time while the old one stays valid. So the source is `scripts/token-auto.ts` over CDP, refreshing by clearing the cookie about 20 min before expiry; no extension.
 
 ### T13: cURL paste dialog keeps its Save button reachable
 - Serves: "the user can paste a cURL from their browser to replace it" (spec.md:57), 375 px usable (spec.md:61). Owner's walkthrough 2026-10-23: a long paste grows the textarea and pushes the Save button out of reach.
@@ -167,6 +167,6 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Notes:
 
 ## Escalations
-- T12 blocked (2026-10-23): the owner has not run the token spike yet (no `spike/out/`). Needs the spike outcome: which variant, if any, kept a pair accepted for 2+ h unattended, plus the replay and parts-cap results for `spike/RESULT.md`. Resume with `/fbs:implement pickup-watch` once it is run. Cleanup and the final review wait for T12.
+- Resolved (2026-10-24): the owner ran the token spike; the result is in T12's notes, and T12 is unblocked.
 - Spike results so far (2026-10-23): replay — Node fetch and curl both 200; parts-cap — HTTP 200 but every store returned 20/40 parts (Apple caps at 20 parts per request); playwright — round 1 HTTP 541 (rejected); cdp — round 1 HTTP 200, rounds 2–3 pending.
 - Resolved (2026-10-23): the owner's walkthrough changes went through `fbs:changes` (changes.md C1-C5). The spec and design were amended and re-approved by the owner, and became T14-T18. C3 was T13.
