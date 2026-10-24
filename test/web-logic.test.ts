@@ -4,6 +4,7 @@ import {
   buildCatalogTree,
   errorMessage,
   healthText,
+  lanStatus,
   lanUrls,
   partsToWatch,
   stockBoard,
@@ -72,6 +73,21 @@ describe('LAN URLs', () => {
         'http://my-mac.local:4319',
       ]),
     ).toEqual(['http://192.168.1.20:4319', 'http://my-mac.local:4319'])
+  })
+})
+
+describe('Wi-Fi access status', () => {
+  it('is off with nothing to show when disabled and nothing pending', () => {
+    expect(lanStatus({ enabled: false, restartRequired: false })).toBe('off')
+  })
+  it('is live, so the addresses can be links, when enabled and already applied', () => {
+    expect(lanStatus({ enabled: true, restartRequired: false })).toBe('live')
+  })
+  it('is waiting to turn on when enabled but the server was bound without it', () => {
+    expect(lanStatus({ enabled: true, restartRequired: true })).toBe('pending-on')
+  })
+  it('is waiting to turn off when disabled but the server is still bound to the network', () => {
+    expect(lanStatus({ enabled: false, restartRequired: true })).toBe('pending-off')
   })
 })
 
