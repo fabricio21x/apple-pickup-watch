@@ -161,6 +161,14 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Review: approve-with-comments, 0 fix rounds
 - Notes: Also folded in T18's r-1 (banner clears on view change) and r-2 (one exported `isInStock`). Non-blocking: nothing tests the banner clearing (src/web/App.tsx:51; no component tests in the project). Deviations: over-cap siblings are left out of `cells` and shown as "Not checked" only from `partsCount.unchecked`; the old "12 cells" assertion now counts only the watched part's cells.
 
+### T20: One store per line in the stock message
+- Serves: spec.md:29 (stores grouped Today and Tomorrow as plain text with their distance), 59, 60; design.md decision 25. Change C7 (walkthrough to-do 1a).
+- Files: `src/server/telegram.ts` (each store, and each gone store, on its own line under its heading instead of comma-separated), `test/telegram.test.ts` (layout and the 4096-character worst case, now with a Gone line too)
+- Depends on: none
+- Status: todo
+- Review:
+- Notes: Owner asked for it after seeing the live message; more lines, easier to read.
+
 ## Final review
 - Status: done
 - Review: approve-with-comments, 0 fix rounds (range 7a85437..1a63282; 411 tests pass, type check clean)
