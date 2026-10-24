@@ -1,14 +1,7 @@
 /*
- * Keeps the monitor's Apple token pair valid, unattended.
- *
- *   npm run token:auto
- *
- * Drives a dedicated Brave profile over CDP (launching Brave if the port is not answering). Before the pair
- * expires it clears shld_bt_ck, reloads the iPhone buy page so Apple issues a fresh one, and posts the pair to
- * POST /api/token on the local server. Cookie values are never logged.
- *
- * Env (.env or shell): PORT (the server, default 4319), BRAVE_CDP_PORT (default 9222),
- *   BRAVE_PROFILE_DIR (default data/brave-profile).
+ * Keeps the monitor's Apple token pair valid, unattended: npm run token:auto
+ * Env (.env or shell): PORT (default 4319), BRAVE_CDP_PORT (default 9222), BRAVE_PROFILE_DIR (default data/brave-profile).
+ * Cookie values are never logged.
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
@@ -103,6 +96,7 @@ async function currentPair(context: BrowserContext): Promise<Pair & { userAgent:
     let pair = await readPair(context)
     if (needsRefresh(pair, Date.now())) {
       log('pair missing or near expiry: clearing shld_bt_ck and reloading the buy page')
+      // Apple issues a fresh pair on a page load only once shld_bt_ck is gone, never before it expires (spike/RESULT.md).
       await context.clearCookies({ name: 'shld_bt_ck' })
       await page.goto(BUY_PAGE, { waitUntil: 'load' })
       await page.waitForTimeout(PAGE_SETTLE_MS)

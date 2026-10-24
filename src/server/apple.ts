@@ -247,7 +247,6 @@ export function parseTokenBody(body: unknown, now: number): TokenResult {
 
 const ANSI_C_ESCAPES: Record<string, string> = { n: '\n', r: '\r', t: '\t', '\\': '\\', "'": "'", '"': '"' }
 
-// Splits a pasted shell command the way bash would: '…', "…", $'…', backslash escapes and line continuations.
 function shellWords(input: string): string[] {
   const words: string[] = []
   let word = ''
