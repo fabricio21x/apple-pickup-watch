@@ -5,8 +5,8 @@
 - Commit: 78eca36
 
 ## Summary
-- To-dos, defects first: no defects. One UX change: 1a, one store per line in the Telegram stock message instead of comma-separated (and the Gone line the same way), src/server/telegram.ts:27-28 and :43.
-- Decisions still open: whether to build 1a now.
+- To-dos, defects first: no defects. Two UX changes: 5a, the Wi-Fi switch's restart hint is easy to miss and the network URLs look live before the restart (src/web/Settings.tsx:189-197); 1a, one store per line in the Telegram stock message instead of comma-separated (and the Gone line the same way), src/server/telegram.ts:27-28 and :43.
+- Decisions: 1a is being built now (change C7, T20); whether to build 5a is open.
 - To verify: the 3 h unattended token:auto run (started 15:25Z; first proactive refresh due about 17:06Z, 20 min before the 17:26Z expiry); the phone over Wi-Fi after the opt-in (spec.md:72) was not shown.
 - Observations: None.
 - Demo data: none. The walkthrough used the owner's real watches, stores and live stock; validation's test watch (MJQ84LL/A) was removed 2 s after it was added, and the interval was restored to 60.
@@ -24,6 +24,7 @@ No sign-in: the app has no login and answers only on 127.0.0.1. No demo data: th
 | # | Feature | Type | Severity | What | Root cause |
 |---|---|---|---|---|---|
 | 1a | 1 | UX | medium | One store per line under each day heading in the stock message (and one gone store per line), so it reads better; the message gets longer | src/server/telegram.ts:27-28 joins a day's stores with `', '` on one `🟢 Today:` line, and :43 joins gone stores with `', '`; T17 chose this layout where design decision 25 said only "lines of store names" |
+| 5a | 5 | UX | medium | After turning on Wi-Fi access, make the needed restart obvious and don't present the network URLs as working until the server has restarted | src/web/Settings.tsx:189-191 shows "Restart the monitor to apply this change." in small muted text, and :192-197 lists the LAN URLs as links as soon as `lan.enabled` is true, though the server binds 0.0.0.0 only at boot (design decision 16, src/server/index.ts:38); verified 2026-10-24: `enabled: true, restartRequired: true`, still listening on 127.0.0.1:4319 until restarted, then 200 from 192.168.18.75 and fabricios-macbook.local |
 
 ## Feature 1: Telegram stock alert
 - Status: done
@@ -62,8 +63,9 @@ No sign-in: the app has no login and answers only on 127.0.0.1. No demo data: th
 - Shown: reviewed by the owner on their own, in the chat and the running app, together with feature 1; not presented step by step.
 - Notes (verbatim):
   > otherwise things look good
+  > only thing. I notice is that wifi access does not load in my other network devices
 - Screenshots: None
-- To-dos: None
+- To-dos: 5a (the app was restarted at 2026-10-24 ~15:55Z; the LAN URLs then answered 200)
 
 ## Observations
 None
