@@ -33,7 +33,7 @@
 - Source: user, same walkthrough
 - Words: The one-page feels awful, I think we can have a single page but add some sort of client navigation so it feels better, too much scrolling, I get lost when going through each of the cards, a dashboard like layout would be way better
 - Level: scope
-- Status: planned
+- Status: done
 - Outcome: spec.md Scope (UI) and acceptance criteria 66, 69-71; design.md decision 18, File map. Spec and design approved by the owner ("yes", 2026-10-23). Task T18.
 
 ## C5: Cap tracked parts at 20
@@ -41,7 +41,7 @@
 - Source: user, answering the token spike's parts-cap result (Apple returns at most 20 parts per request, plan.md Escalations)
 - Words: About the 20 part limit, yeah we can limit to 20 parts for now to avoid redesigning
 - Level: scope
-- Status: planned
+- Status: done
 - Outcome: spec.md Scope (parts cap), out of scope, acceptance criterion 55 and Facts; design.md decision 24, StateDto, Risks. Spec and design approved by the owner ("yes", 2026-10-23). Tasks T15, T18.
 
 ## C6: Stock board can't show other-color rows

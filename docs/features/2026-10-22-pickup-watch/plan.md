@@ -149,9 +149,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:35, 55 (parts count and refusal message), 66, 69-71; design.md decisions 18, 24 (over-cap parts in red, "Not checked" on the board). Change C4.
 - Files: `src/web/App.tsx` (shell, hash view, sidebar at md+, top bar and bottom tabs below), `src/web/StockBoard.tsx` (new), `src/web/Watches.tsx`, `src/web/Stores.tsx` (from `Location.tsx`), `src/web/Settings.tsx` (from `SettingsStrip.tsx`), `src/web/logic.ts`, `test/web-logic.test.ts`
 - Depends on: T15
-- Status: todo
-- Review:
-- Notes: The cap's 409 body carries `tracked` as the count after the change; word the refusal as "Adds <adding> parts, which would make <tracked> / 20". Delete `Location.tsx` and `SettingsStrip.tsx` after the move. Worth folding in from T13's notes: `resize-none` and 16 px text on the cURL textarea, a max height on the dialog. Check by hand at 375 px and 1280 px, plus refresh and back.
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Browser checks by the implementer (Playwright, 28 pass): bottom tabs at 375×812 and sidebar at 1280×800, no horizontal scroll on every view, refresh keeps and back returns to the view, a real 409 refusal keeps the picker's selection, a long quote wraps, the dialog fits at 375×400. Non-blocking (r-1 and r-2 folded into T19): r-1 an error banner stays after switching views (src/web/App.tsx:40); r-2 the in-stock rule is written twice (src/web/StockBoard.tsx:37 and logic.ts:38 `stockRank`); the over-cap row test name says "after the watched rows" but the sort is by stock rank only (test/web-logic.test.ts:235). Deviations: blocks with stock come first; the "Watching" card (count, over-cap line, rows) sits above the picker; "part" singular when adding 1; built in a worktree and merged as 9f24d29; the stock board shows other colors only past the cap until T19.
 
 ### T19: Other-color rows on the stock board
 - Serves: spec.md:69 (Today / Tomorrow / unavailable for each tracked pair); design.md decision 18 ("Other color" rows), Data shapes (`WatchDto.cells`, `GridCell.part`). Change C6.
@@ -159,7 +159,7 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Depends on: T17, T18
 - Status: todo
 - Review:
-- Notes: Found by T18: until this lands, the board shows other colors only when they are past the cap.
+- Notes: Also fold in T18's r-1 (clear the error banner when the view changes) and r-2 (one exported in-stock rule in logic.ts used by StockBoard.tsx and `stockRank`). Found by T18: until this lands, the board shows other colors only when they are past the cap.
 
 ## Final review
 - Status: todo
