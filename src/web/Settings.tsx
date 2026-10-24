@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { formatTime, lanUrls, telegramErrorText, timeLeft, tokenLabel } from './logic'
+import { formatTime, lanStatus, lanUrls, telegramErrorText, timeLeft, tokenLabel } from './logic'
 
 export function Settings({ state, act }: { state: StateDto; act: Act }) {
   return (
@@ -179,6 +179,7 @@ function IntervalSetting({ intervalSec, act }: { intervalSec: number; act: Act }
 
 function LanSetting({ lan, act }: { lan: StateDto['lan']; act: Act }) {
   const urls = lanUrls(lan.urls)
+  const status = lanStatus(lan)
 
   return (
     <section>
@@ -186,10 +187,32 @@ function LanSetting({ lan, act }: { lan: StateDto['lan']; act: Act }) {
         <Switch id="lan" checked={lan.enabled} onCheckedChange={(on) => void act(() => api.setLan(on))} />
         <Label htmlFor="lan">Wi-Fi access from other devices</Label>
       </div>
-      {lan.restartRequired && (
-        <p className="text-sm text-muted-foreground">Restart the monitor to apply this change.</p>
+      {(status === 'pending-on' || status === 'pending-off') && (
+        <div role="alert" className="mt-2 space-y-2 rounded-md border border-destructive p-3 text-sm text-destructive">
+          <p className="font-medium break-words">
+            {status === 'pending-on'
+              ? 'Not available yet: the change takes effect after restarting the monitor.'
+              : 'Still available to other devices until you restart the monitor.'}
+          </p>
+          <p className="break-all">
+            Restart the monitor (stop and rerun <code>npm start</code>, or{' '}
+            <code>launchctl kickstart -k gui/$UID/com.pickup-watch</code> when it runs as a LaunchAgent).
+          </p>
+          {status === 'pending-on' && urls.length > 0 && (
+            <div>
+              <p>Available after the restart:</p>
+              <ul>
+                {urls.map((u) => (
+                  <li key={u} className="break-all">
+                    {u}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
-      {lan.enabled && urls.length > 0 && (
+      {status === 'live' && urls.length > 0 && (
         <ul className="text-sm">
           {urls.map((u) => (
             <li key={u} className="break-all">

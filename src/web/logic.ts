@@ -112,6 +112,13 @@ export function lanUrls(urls: string[]): string[] {
   return urls.filter((u) => !LOOPBACK_HOST.test(new URL(u).hostname))
 }
 
+export type LanStatus = 'off' | 'live' | 'pending-on' | 'pending-off'
+
+export function lanStatus({ enabled, restartRequired }: Pick<StateDto['lan'], 'enabled' | 'restartRequired'>): LanStatus {
+  if (restartRequired) return enabled ? 'pending-on' : 'pending-off'
+  return enabled ? 'live' : 'off'
+}
+
 export function timeLeft(expiresAt: number, now: number): string {
   const minutes = Math.floor((expiresAt - now) / 60_000)
   if (expiresAt <= now) return 'expired'
