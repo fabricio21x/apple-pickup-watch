@@ -126,9 +126,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:54 (one request), 55 (cap, refusal with count); design.md decision 24, decision 5 (re-posting a watched part is a no-op). Change C5.
 - Files: `src/server/domain.ts` (`trackedParts`, watched first), `src/server/monitor.ts` (part list cut at 20), `src/server/api.ts` (409 `parts-cap` on watch create and other-colors on, ignoring already-watched parts), `src/shared/types.ts` (`StateDto.partsCount`), `test/domain.test.ts`, `test/monitor.test.ts`, `test/api.test.ts`
 - Depends on: none (shares no file with T14, which waits on the owner's `igt` check)
-- Status: todo
-- Review:
-- Notes:
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking: the 409 `tracked` is the count after the change (3 tracked + 19 added gives `tracked: 22, adding: 19`), so T18 must word it as "Adds <adding> parts, which would make <tracked> / 20" (src/server/api.ts:200); the re-post no-op test passed before the change too and only pins existing behaviour (test/api.test.ts:627); design.md's Test seams row says `StateDto.parts` where the field is `partsCount`, and its Impact row puts the cut in apple.ts:171 where it is in monitor.ts:185 (wording only, left so the approved design's hash holds). Deviations: the cap refuses only a change that would end above 20 and raise the count (`tracked > 20 && tracked > before`, src/server/api.ts:199), so re-posting a watched part or moving a part from other color to watched stays allowed when older data is already over the cap, matching spec.md:55 ("would go past 20") and decision 24's "a refusal drops nothing the owner set up"; `PARTS_CAP` and `trackedParts` live in domain.ts with a shared private `relatedColorsBySibling`; `partsCount.unchecked` is computed in api.ts as `trackedParts(...).slice(20)`, mirroring the monitor's cut.
 
 ### T16: One stock message per model + storage
 - Serves: spec.md:28-30, 32 (grouping, sound, other colors), 56-57, 59-60, 62 (no repeats, Today/Tomorrow alone sends nothing); design.md decisions 3 (case-insensitive label), 6 (grouped send pass, not-checked stores, non-retryable 4xx skips a group, role check at commit). Change C1.
@@ -152,7 +152,7 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Depends on: T15
 - Status: todo
 - Review:
-- Notes: Delete `Location.tsx` and `SettingsStrip.tsx` after the move. Worth folding in from T13's notes: `resize-none` and 16 px text on the cURL textarea, a max height on the dialog. Check by hand at 375 px and 1280 px, plus refresh and back.
+- Notes: The cap's 409 body carries `tracked` as the count after the change; word the refusal as "Adds <adding> parts, which would make <tracked> / 20". Delete `Location.tsx` and `SettingsStrip.tsx` after the move. Worth folding in from T13's notes: `resize-none` and 16 px text on the cURL textarea, a max height on the dialog. Check by hand at 375 px and 1280 px, plus refresh and back.
 
 ## Final review
 - Status: todo
