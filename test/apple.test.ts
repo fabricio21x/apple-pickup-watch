@@ -56,7 +56,7 @@ describe('catalog', () => {
     ])
   })
 
-  it('splits the title into model, capacity and color and keeps productLink as the buy link', async () => {
+  it('splits the title into model, capacity and color and links to the unlocked buy page', async () => {
     const { apple: a } = apple(locators)
     const result = await a.fetchCatalog()
     if (!result.ok) throw new Error('catalog failed')
@@ -67,7 +67,7 @@ describe('catalog', () => {
       capacity: '512gb',
       colorName: 'Silver',
       title: 'iPhone 18 Pro 512GB Silver',
-      buyUrl: 'https://www.apple.com/shop/buy-iphone/iphone-18-pro/6.3-inch-display-512gb-silver',
+      buyUrl: 'https://www.apple.com/shop/buy-iphone/iphone-18-pro/6.3-inch-display-512gb-silver-unlocked',
     })
     expect(byPart.get('MK1F4LL/A')).toMatchObject({
       modelName: 'iPhone Duo',
@@ -120,6 +120,54 @@ describe('catalog', () => {
     expect(result.value).toHaveLength(40 - bad.length)
     for (const part of droppedParts) expect(result.value.find((p) => p.part === part)).toBeUndefined()
     expect(result.value.every((p) => p.buyUrl.startsWith('https://www.apple.com/shop/buy-iphone/'))).toBe(true)
+  })
+
+  it('ends every buy link in -unlocked with no query, so Apple preselects Unlocked and No trade-in', async () => {
+    const { apple: a } = apple(locators)
+    const result = await a.fetchCatalog()
+    if (!result.ok) throw new Error('catalog failed')
+    expect(result.value).toHaveLength(40)
+    for (const { buyUrl } of result.value) {
+      const url = new URL(buyUrl)
+      expect(url.origin).toBe('https://www.apple.com')
+      expect(url.pathname).toMatch(/^\/shop\/buy-iphone\/.+-unlocked$/)
+      expect(url.search).toBe('')
+      expect(url.hash).toBe('')
+    }
+  })
+
+  it('does not double -unlocked when Apple already includes it', async () => {
+    const body = JSON.parse(fixture('locator-18pro.json'))
+    const products: { carrierModel: string; partNumber: string; productLink: string }[] =
+      body.body.productLocatorOverlayData.productLocatorMeta.products
+    const entry = products.find((p) => p.carrierModel === 'UNLOCKED/US')!
+    const plain = entry.productLink
+    entry.productLink = `${plain}-unlocked`
+    const { apple: a } = apple(async (url) =>
+      url.includes('iphone18pro') ? new Response(JSON.stringify(body)) : new Response(fixture('locator-duo.json')),
+    )
+    const result = await a.fetchCatalog()
+    if (!result.ok) throw new Error('catalog failed')
+    expect(result.value.find((p) => p.part === entry.partNumber)?.buyUrl).toBe(`${plain}-unlocked`)
+  })
+
+  it('drops entries whose productLink carries a query or fragment', async () => {
+    const body = JSON.parse(fixture('locator-18pro.json'))
+    const products: { carrierModel: string; partNumber: string; productLink: string }[] =
+      body.body.productLocatorOverlayData.productLocatorMeta.products
+    const unlocked = products.filter((p) => p.carrierModel === 'UNLOCKED/US')
+    const withQuery = unlocked[0]!
+    const withFragment = unlocked[1]!
+    withQuery.productLink += '?igt=true'
+    withFragment.productLink += '#config'
+    const { apple: a } = apple(async (url) =>
+      url.includes('iphone18pro') ? new Response(JSON.stringify(body)) : new Response(fixture('locator-duo.json')),
+    )
+    const result = await a.fetchCatalog()
+    if (!result.ok) throw new Error('catalog failed')
+    expect(result.value).toHaveLength(38)
+    expect(result.value.find((p) => p.part === withQuery.partNumber)).toBeUndefined()
+    expect(result.value.find((p) => p.part === withFragment.partNumber)).toBeUndefined()
   })
 
   it('fails as network when a locator request throws', async () => {
