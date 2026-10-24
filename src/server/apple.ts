@@ -213,6 +213,11 @@ export function createApple(deps: { fetch: typeof fetch; now: () => number; time
 
 const SHLD_RE = /^[^|]+\|(\d+)\|.+\|[^|]+$/
 
+export function shldExpiresAt(shldBtCk: string): number | undefined {
+  const stamp = SHLD_RE.exec(shldBtCk)?.[1]
+  return stamp === undefined ? undefined : Number(stamp) * 1000
+}
+
 function buildToken(
   dssid2: string | undefined,
   shldBtCk: string | undefined,
@@ -221,9 +226,8 @@ function buildToken(
 ): TokenResult {
   if (!dssid2 || !shldBtCk) return { ok: false, reason: 'missing-cookie' }
   if (!userAgent) return { ok: false, reason: 'missing-user-agent' }
-  const stamp = SHLD_RE.exec(shldBtCk)?.[1]
-  if (stamp === undefined) return { ok: false, reason: 'malformed' }
-  const expiresAt = Number(stamp) * 1000
+  const expiresAt = shldExpiresAt(shldBtCk)
+  if (expiresAt === undefined) return { ok: false, reason: 'malformed' }
   if (expiresAt <= now) return { ok: false, reason: 'expired' }
   if (expiresAt > now + MAX_AHEAD_MS) return { ok: false, reason: 'too-far-ahead' }
   return { ok: true, token: { dssid2, shldBtCk, userAgent, expiresAt } }

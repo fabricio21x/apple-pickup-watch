@@ -35,7 +35,18 @@ The first start creates `data/` (mode 0700) with the database `data/pickup-watch
 
 ### Token source
 
-_To be filled in: the browser extension or `npm run token:auto`, whichever the spike picked._
+Run this in a second terminal and keep it running:
+
+```sh
+npm run token:auto
+```
+
+It opens its own Brave window with a separate profile (`data/brave-profile`), visits the iPhone buy page, and posts the Apple cookie pair to the app. About every 2 hours, 20 minutes before the pair expires, it gets a fresh one the same way, so there is no gap and the expiry warning stays quiet. It also posts when it starts, so a freshly started app gets a token right away. If something fails (Brave closed, Apple slow, the app down) it logs the error and retries in a minute.
+
+- Leave that Brave window open. You can minimise it, but don't quit it or sign in to anything there; if you do close it, the script launches it again.
+- Brave's remote-debugging port (9222, set `BRAVE_CDP_PORT` to change it) listens only on this Mac. `BRAVE_PROFILE_DIR` changes the profile folder.
+- It reads `PORT` from `.env` like the app, so it finds the app on its own port.
+- Pasting a cURL (below) still works as the fallback, for example if Apple stops accepting the refreshed pair.
 
 ### Pasting a cURL from Brave
 
@@ -81,7 +92,7 @@ Checking once a minute is light, but Apple may still block the session or IP, an
 
 ## Token spike
 
-`spike/token.ts` is the throwaway experiment that decided how to keep the token valid. Its header lists the variants and flags:
+`spike/token.ts` is the throwaway experiment that decided how to keep the token valid; the outcome is in `spike/RESULT.md`. Its header lists the variants and flags:
 
 ```sh
 npx playwright install chromium   # once, for the playwright variant
