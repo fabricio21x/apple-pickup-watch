@@ -89,7 +89,7 @@ describe('stock message', () => {
       }),
     )
 
-    expect(text.split('\n').slice(3)).toEqual([
+    expect(text.split('\n').slice(2)).toEqual([
       '<b>Black</b>',
       '🟢 Today:',
       '  🆕 Miami Worldcenter (2.7 mi)',
