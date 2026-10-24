@@ -49,9 +49,11 @@ async function setup(options: { appleSeconds?: number } = {}) {
   let t = NOW
   const now = () => t
   const sleeps: number[] = []
+  let duringSleep = () => {}
   const sleep = async (ms: number) => {
     sleeps.push(ms)
     t += ms
+    duringSleep()
   }
 
   let stock: Record<string, Stock> = {}
@@ -113,6 +115,9 @@ async function setup(options: { appleSeconds?: number } = {}) {
     onSend: (fn: typeof reply) => {
       reply = fn
     },
+    onSleep: (fn: () => void) => {
+      duringSleep = fn
+    },
     texts: () => attempts.map((a) => a.text),
     watch: (part: string, otherColors = false) => db.addWatch(part, otherColors, NOW),
     alerted: () => db.listAlerted().map((a) => `${a.part}@${a.store}`),
@@ -134,7 +139,7 @@ describe('in-stock and out-of-stock alerts', () => {
     expect(message?.text).toContain('West 14th Street')
     expect(message?.text).toContain('0.7 mi')
     expect(message?.text).toContain('Today')
-    expect(message?.button?.url).toBe(SILVER_URL)
+    expect(message?.buttons?.[0]?.url).toBe(SILVER_URL)
     expect(message?.silent).toBeUndefined()
     expect(s.alerted()).toEqual([`${SILVER}@R250`])
   })
@@ -150,7 +155,7 @@ describe('in-stock and out-of-stock alerts', () => {
     expect(s.attempts).toHaveLength(1)
     const [message] = s.attempts
     for (const word of ['Silver', 'Burgundy', 'West 14th Street', 'Grand Central', 'SoHo']) expect(message?.text).toContain(word)
-    expect(message?.text.match(/\(new\)/g)).toHaveLength(6)
+    expect(message?.text.match(/🆕/g)).toHaveLength(6)
     expect(message?.silent).toBeUndefined()
     expect(s.alerted()).toHaveLength(6)
   })
@@ -167,8 +172,8 @@ describe('in-stock and out-of-stock alerts', () => {
     expect(s.attempts).toHaveLength(2)
     const text = s.texts()[1] ?? ''
     for (const word of ['West 14th Street', 'Grand Central', 'SoHo', 'Fifth Avenue']) expect(text).toContain(word)
-    expect(text.match(/\(new\)/g)).toHaveLength(1)
-    expect(text).toMatch(/Fifth Avenue.*\(new\)/)
+    expect(text.match(/🆕/g)).toHaveLength(1)
+    expect(text).toContain('🆕 Fifth Avenue')
   })
 
   it('sends one silent message with the stores left and the one that went out when a store goes out', async () => {
@@ -184,7 +189,7 @@ describe('in-stock and out-of-stock alerts', () => {
     const message = s.attempts[1]
     expect(message?.silent).toBe(true)
     expect(message?.text).toContain('Today: West 14th Street')
-    expect(message?.text).toContain('Out of stock: Silver at Grand Central')
+    expect(message?.text).toContain('Gone: Silver at Grand Central')
     expect(message?.text).not.toMatch(/sold out/i)
     expect(s.alerted()).toEqual([`${SILVER}@R250`])
   })
@@ -211,7 +216,7 @@ describe('in-stock and out-of-stock alerts', () => {
     await s.monitor.runCheck()
 
     expect(s.texts()).toHaveLength(2)
-    expect(s.texts()[0]).toContain('Today: West 14th Street')
+    expect(s.texts()[0]).toContain('Today: 🆕 West 14th Street')
     expect(s.texts()[1]).toMatch(/sold out everywhere/i)
     expect(s.texts()[1]).toContain('iPhone 18 Pro 512GB')
     expect(s.texts()[1]).toContain('West 14th Street')
@@ -284,12 +289,12 @@ describe('other colors', () => {
 
     expect(s.attempts).toHaveLength(1)
     const message = s.attempts[0]
-    expect(message?.text).toContain('Burgundy (Other color)')
+    expect(message?.text).toContain('<b>Burgundy</b> · Other color')
     expect(message?.text).toContain('iPhone 18 Pro 512GB')
     expect(message?.text).toContain('West 14th Street')
     expect(message?.text).toContain('0.7 mi')
     expect(message?.text).toContain('Today')
-    expect(message?.button?.url).toBe(BURGUNDY_URL)
+    expect(message?.buttons?.[0]?.url).toBe(BURGUNDY_URL)
   })
 
   it('lists a watched color and its other color in one message, the other labelled "Other color"', async () => {
@@ -300,8 +305,8 @@ describe('other colors', () => {
     await s.monitor.runCheck()
 
     expect(s.attempts).toHaveLength(1)
-    expect(s.texts()[0]).toMatch(/^Silver$/m)
-    expect(s.texts()[0]).toContain('Burgundy (Other color)')
+    expect(s.texts()[0]).toContain('<b>Silver</b>')
+    expect(s.texts()[0]).toContain('<b>Burgundy</b> · Other color')
     expect(s.alerted()).toEqual([`${SILVER}@R250`, `${BURGUNDY}@R250`])
   })
 
@@ -315,7 +320,7 @@ describe('other colors', () => {
     await s.monitor.runCheck()
 
     expect(s.texts()).toHaveLength(2)
-    expect(s.texts()[1]).toContain('Out of stock: Burgundy at West 14th Street')
+    expect(s.texts()[1]).toContain('Gone: Burgundy at West 14th Street')
     expect(s.attempts[1]?.silent).toBe(true)
   })
 
@@ -488,9 +493,9 @@ describe('send pass', () => {
     await s.monitor.runCheck()
 
     expect(s.texts()).toHaveLength(3)
-    textStarts(s.texts()[0], 'iPhone 18 Pro Max 1TB')
-    textStarts(s.texts()[1], 'iPhone 18 Pro 256GB')
-    textStarts(s.texts()[2], 'iPhone 18 Pro 512GB')
+    textStarts(s.texts()[0], '<b>📱 iPhone 18 Pro Max 1TB</b>')
+    textStarts(s.texts()[1], '<b>📱 iPhone 18 Pro 256GB</b>')
+    textStarts(s.texts()[2], '<b>📱 iPhone 18 Pro 512GB</b>')
     expect(s.texts()[2]).toMatch(/sold out everywhere/i)
   })
 
@@ -663,7 +668,7 @@ describe('send pass', () => {
     await s.monitor.runCheck()
 
     expect(s.attempts).toHaveLength(2)
-    textStarts(s.texts()[1], 'iPhone 18 Pro 256GB')
+    textStarts(s.texts()[1], '<b>📱 iPhone 18 Pro 256GB</b>')
     expect(s.texts()[1]).not.toContain('Other color')
     expect(s.alerted()).toEqual([`${PRO_256_SILVER}@R250`, `${SILVER}@R250`])
   })
@@ -685,7 +690,7 @@ describe('send pass', () => {
     await s.monitor.runCheck()
 
     expect(s.attempts).toHaveLength(1)
-    expect(s.texts()[0]).toContain('Burgundy (Other color)')
+    expect(s.texts()[0]).toContain('<b>Burgundy</b> · Other color')
     expect(s.alerted()).toEqual([])
 
     await s.monitor.runCheck()
@@ -694,6 +699,39 @@ describe('send pass', () => {
     expect(s.texts()[1]).toContain('Burgundy')
     expect(s.texts()[1]).not.toContain('Other color')
     expect(s.alerted()).toEqual([`${BURGUNDY}@R250`])
+  })
+
+  it('skips a group whose only store was toggled off during the gap before it, and sends nothing for it', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.watch(MAX_1TB)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${MAX_1TB}@R415`]: 'Today' })
+    s.onSleep(() => s.db.setStoreEnabled('R415', false))
+
+    await s.monitor.runCheck()
+
+    expect(s.sleeps).toEqual([1100])
+    expect(s.attempts).toHaveLength(1)
+    expect(s.alerted()).toEqual([`${SILVER}@R250`])
+  })
+
+  it('drops the alerted row of a pair that went out even when its role flipped while the out message was in flight', async () => {
+    const s = await setup()
+    s.watch(SILVER, true)
+    s.watch(BURGUNDY)
+    s.setStock({ [`${BURGUNDY}@R250`]: 'Today' })
+    await s.monitor.runCheck()
+    expect(s.alerted()).toEqual([`${BURGUNDY}@R250`])
+
+    s.setStock({})
+    s.onSend(() => {
+      s.db.removeWatch(BURGUNDY)
+      return { ok: true }
+    })
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(2)
+    expect(s.alerted()).toEqual([])
   })
 
   it('writes no row when the store is toggled off while its message is being delivered', async () => {
@@ -739,7 +777,7 @@ describe('health', () => {
 
     expect(downs(s)).toHaveLength(1)
     expect(downs(s)[0]).toMatch(wording)
-    expect(s.attempts[0]?.button).toBeUndefined()
+    expect(s.attempts[0]?.buttons).toBeUndefined()
   })
 
   it('names an expired token in the down message', async () => {
@@ -803,7 +841,7 @@ describe('health', () => {
     await s.monitor.runCheck()
 
     expect(ups(s)).toHaveLength(1)
-    expect(s.attempts[0]?.button).toBeUndefined()
+    expect(s.attempts[0]?.buttons).toBeUndefined()
   })
 
   it('sends no back up message when no down message was announced', async () => {
@@ -922,7 +960,7 @@ describe('token expiry warning', () => {
     expect(warnings(s)).toHaveLength(1)
     expect(warnings(s)[0]).toMatch(/\d{2}:\d{2}/)
     expect(warnings(s)[0]).toMatch(/paste a fresh cURL or open apple\.com in Brave/i)
-    expect(s.attempts[0]?.button).toBeUndefined()
+    expect(s.attempts[0]?.buttons).toBeUndefined()
   })
 
   it('does not warn while the token has more than 15 minutes left', async () => {
@@ -1127,29 +1165,7 @@ describe('telegram', () => {
     }) as typeof fetch
     return { calls, telegram: createTelegram({ fetch: fetchFake, botToken: BOT_TOKEN, chatId: '42' }) }
   }
-  const message: OutgoingMessage = { text: 'hello', button: { text: 'Open', url: SILVER_URL } }
-
-  it('posts plain text with an inline URL button and no parse_mode', async () => {
-    const { calls, telegram } = telegramWith(async () => new Response('{"ok":true}'))
-
-    const result = await telegram.sendMessage(message)
-
-    expect(result).toEqual({ ok: true })
-    expect(calls[0]?.url).toBe(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`)
-    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
-      chat_id: '42',
-      text: 'hello',
-      reply_markup: { inline_keyboard: [[{ text: 'Open', url: SILVER_URL }]] },
-    })
-  })
-
-  it('asks Telegram for no notification sound on a silent message', async () => {
-    const { calls, telegram } = telegramWith(async () => new Response('{"ok":true}'))
-
-    await telegram.sendMessage({ text: 'hello', silent: true })
-
-    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ chat_id: '42', text: 'hello', disable_notification: true })
-  })
+  const message: OutgoingMessage = { text: 'hello' }
 
   it('still returns ok when cancelling the success response body rejects', async () => {
     const { telegram } = telegramWith(

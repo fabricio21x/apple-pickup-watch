@@ -115,9 +115,9 @@ export function createMonitor(deps: {
     let refused: TelegramError | null = null
 
     for (const { group } of rebuild()) {
-      const message = rebuild().find(
-        (m) => m.group.modelName === group.modelName && m.group.capacity === group.capacity,
-      )
+      const lookup = () =>
+        rebuild().find((m) => m.group.modelName === group.modelName && m.group.capacity === group.capacity)
+      let message = lookup()
       if (!message) continue
 
       const hasWatchedIn = message.commit.insert.some((pair) => pair.role === 'watched')
@@ -126,7 +126,11 @@ export function createMonitor(deps: {
 
       const wait = lastSentAt === null ? 0 : Math.max(0, lastSentAt + SEND_GAP_MS - now())
       if (!exempt && now() + wait > cutoff) return
-      if (wait > 0) await sleep(wait)
+      if (wait > 0) {
+        await sleep(wait)
+        message = lookup()
+        if (!message) continue
+      }
 
       const outgoing = stockMessage(message)
       let result = await telegram.sendMessage(outgoing)
@@ -146,7 +150,7 @@ export function createMonitor(deps: {
       db.transaction(() => {
         const tracked = currentTracked()
         message.commit.insert.filter((pair) => hasPair(tracked, pair)).forEach((pair) => db.insertAlerted(pair))
-        message.commit.delete.filter((pair) => hasPair(tracked, pair)).forEach((pair) => db.deleteAlerted(pair))
+        message.commit.delete.forEach((pair) => db.deleteAlerted(pair))
       })
     }
   }

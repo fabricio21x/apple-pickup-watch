@@ -4,29 +4,53 @@ import type { FailureCause, HealthMessage } from './domain'
 
 const TIMEOUT_MS = 10_000
 
-export type OutgoingMessage = { text: string; button?: { text: string; url: string }; silent?: boolean }
+export type OutgoingMessage = { text: string; buttons?: { text: string; url: string }[]; silent?: boolean }
 export type SendResult = { ok: true } | { ok: false; error: TelegramError; retryAfterSec?: number }
 export type Telegram = { sendMessage(message: OutgoingMessage): Promise<SendResult> }
+
+const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }
+const escapeHtml = (value: string) => value.replace(/[&<>"]/g, (char) => HTML_ESCAPES[char] ?? char)
+
+const DAY_EMOJI: Record<string, string> = { Today: '🟢', Tomorrow: '🟡' }
+const NOT_CHECKED = 'not checked'
+
+type ColorStores = StockMessage['colors'][number]['stores']
+
+function storeLines(stores: ColorStores): string[] {
+  const byLabel = new Map<string, ColorStores>()
+  for (const s of stores) byLabel.set(s.label, [...(byLabel.get(s.label) ?? []), s])
+  const rank = (label: string) => (label === 'Today' ? 0 : label === 'Tomorrow' ? 1 : label === NOT_CHECKED ? 3 : 2)
+  return [...byLabel]
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([label, group]) => {
+      const heading = label === NOT_CHECKED ? '⚪ Not checked' : `${DAY_EMOJI[label] ?? '🔵'} ${escapeHtml(label)}`
+      const list = group.map((s) => `${s.isNew ? '🆕 ' : ''}${escapeHtml(s.name)} (${s.distanceMi.toFixed(1)} mi)`)
+      return `${heading}: ${list.join(', ')}`
+    })
+}
 
 export function stockMessage({ group, colors, gone, sound }: StockMessage): OutgoingMessage {
   const sections = colors.map((color) =>
     [
-      `${color.colorName}${color.role === 'other' ? ' (Other color)' : ''}`,
-      ...color.stores.map((s) => `${s.label}: ${s.name}, ${s.distanceMi.toFixed(1)} mi${s.isNew ? ' (new)' : ''}`),
+      `<b>${escapeHtml(color.colorName)}</b>${color.role === 'other' ? ' · Other color' : ''}`,
+      ...storeLines(color.stores),
     ].join('\n'),
   )
   const text = [
-    `${group.modelName} ${group.capacity.toUpperCase()}`,
-    ...(colors.length === 0 ? ['Sold out everywhere'] : sections),
-    ...(gone.length > 0 ? [gone.map((g) => `Out of stock: ${g.colorName} at ${g.storeName}`).join('\n')] : []),
+    `<b>📱 ${escapeHtml(`${group.modelName} ${group.capacity.toUpperCase()}`)}</b>`,
+    ...(colors.length === 0 ? ['🔴 Sold out everywhere'] : sections),
+    ...(gone.length > 0
+      ? [`🔴 Gone: ${gone.map((g) => `${escapeHtml(g.colorName)} at ${escapeHtml(g.storeName)}`).join(', ')}`]
+      : []),
   ].join('\n\n')
-  const first = colors[0]
   return {
     text,
-    ...(first && { button: { text: 'Open buy page', url: first.buyUrl } }),
+    ...(colors.length > 0 && { buttons: colors.map((c) => ({ text: `🛒 Buy ${c.colorName}`, url: c.buyUrl })) }),
     ...(!sound && { silent: true }),
   }
 }
+
+const notice = (heading: string, body: string): OutgoingMessage => ({ text: `${heading}\n${escapeHtml(body)}` })
 
 const CAUSE_TEXT: Record<FailureCause, string> = {
   'token-expired': 'the Apple token has expired',
@@ -38,17 +62,22 @@ const CAUSE_TEXT: Record<FailureCause, string> = {
 const REFRESH_TOKEN = 'Paste a fresh cURL or open apple.com in Brave.'
 
 export function healthMessage(message: HealthMessage): OutgoingMessage {
-  if (message.kind === 'up') return { text: 'Monitoring is back up. Stock alerts are working again.' }
+  if (message.kind === 'up') return notice('✅ <b>Back up</b>', 'Monitoring is back up. Stock alerts are working again.')
   const fix = message.cause === 'token-expired' || message.cause === 'token-rejected' ? ` ${REFRESH_TOKEN}` : ''
-  return { text: `Monitoring is down: ${CAUSE_TEXT[message.cause]}. No stock alerts will arrive until this is fixed.${fix}` }
+  return notice(
+    '🚨 <b>Monitoring is down</b>',
+    `${CAUSE_TEXT[message.cause]}. No stock alerts will arrive until this is fixed.${fix}`,
+  )
 }
 
 export function tokenWarningMessage(expiresAt: number): OutgoingMessage {
   const time = new Date(expiresAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-  return { text: `The Apple token expires at ${time}. ${REFRESH_TOKEN}` }
+  return notice('⏳ <b>Token expiring</b>', `The Apple token expires at ${time}. ${REFRESH_TOKEN}`)
 }
 
-export const startedMessage = (): OutgoingMessage => ({ text: 'Pickup watch monitor started.' })
+export const startedMessage = (): OutgoingMessage => notice('▶️ <b>Monitor started</b>', 'Pickup watch is checking for stock.')
+
+export const testMessage = (): OutgoingMessage => notice('🧪 <b>Test message</b>', 'Telegram alerts are working.')
 
 const ErrorBody = z.looseObject({
   description: z.string().optional(),
@@ -65,12 +94,13 @@ export function createTelegram(deps: {
   const timeoutMs = deps.timeoutMs ?? TIMEOUT_MS
 
   return {
-    async sendMessage({ text, button, silent }) {
+    async sendMessage({ text, buttons, silent }) {
       const body = {
         chat_id: deps.chatId,
         text,
+        parse_mode: 'HTML',
         ...(silent && { disable_notification: true }),
-        ...(button && { reply_markup: { inline_keyboard: [[{ text: button.text, url: button.url }]] } }),
+        ...(buttons && { reply_markup: { inline_keyboard: buttons.map(({ text, url }) => [{ text, url }]) } }),
       }
       let res: Response
       try {

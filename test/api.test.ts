@@ -817,7 +817,7 @@ describe('POST /api/telegram/test', () => {
     expect(res.status).toBe(200)
     expect(res.json).toEqual({ ok: true })
     expect(s.sent).toHaveLength(1)
-    expect(s.sent[0]?.text).toContain('test')
+    expect(s.sent[0]?.text).toContain('<b>Test message</b>')
   })
 
   it('returns the classified Telegram error', async () => {

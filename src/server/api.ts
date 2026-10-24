@@ -9,7 +9,7 @@ import { parseCurl, parseTokenBody, type Apple } from './apple'
 import type { Db } from './db'
 import { PARTS_CAP, trackedParts, type Watch } from './domain'
 import type { Monitor } from './monitor'
-import type { Telegram } from './telegram'
+import { testMessage, type Telegram } from './telegram'
 
 const HOST_CACHE_MS = 5000
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]']
@@ -265,7 +265,7 @@ export function createApi(deps: ApiDeps) {
 
   app.post('/api/telegram/test', async (c) => {
     if (!telegram) return fail(c, 409, 'not-configured')
-    const result = await telegram.sendMessage({ text: 'Pickup watch test message. Telegram alerts are working.' })
+    const result = await telegram.sendMessage(testMessage())
     if (result.ok) return c.json({ ok: true })
     return c.json({ ok: false, error: telegramErrorDto(result.error) }, 502)
   })
