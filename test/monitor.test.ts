@@ -188,8 +188,8 @@ describe('in-stock and out-of-stock alerts', () => {
     expect(s.attempts).toHaveLength(2)
     const message = s.attempts[1]
     expect(message?.silent).toBe(true)
-    expect(message?.text).toContain('Today: West 14th Street')
-    expect(message?.text).toContain('Gone: Silver at Grand Central')
+    expect(message?.text).toContain('Today:\n  West 14th Street')
+    expect(message?.text).toContain('Gone:\n  Silver at Grand Central')
     expect(message?.text).not.toMatch(/sold out/i)
     expect(s.alerted()).toEqual([`${SILVER}@R250`])
   })
@@ -216,7 +216,7 @@ describe('in-stock and out-of-stock alerts', () => {
     await s.monitor.runCheck()
 
     expect(s.texts()).toHaveLength(2)
-    expect(s.texts()[0]).toContain('Today: 🆕 West 14th Street')
+    expect(s.texts()[0]).toContain('Today:\n  🆕 West 14th Street')
     expect(s.texts()[1]).toMatch(/sold out everywhere/i)
     expect(s.texts()[1]).toContain('iPhone 18 Pro 512GB')
     expect(s.texts()[1]).toContain('West 14th Street')
@@ -320,7 +320,7 @@ describe('other colors', () => {
     await s.monitor.runCheck()
 
     expect(s.texts()).toHaveLength(2)
-    expect(s.texts()[1]).toContain('Gone: Burgundy at West 14th Street')
+    expect(s.texts()[1]).toContain('Gone:\n  Burgundy at West 14th Street')
     expect(s.attempts[1]?.silent).toBe(true)
   })
 

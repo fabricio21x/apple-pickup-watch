@@ -24,8 +24,8 @@ function storeLines(stores: ColorStores): string[] {
     .sort(([a], [b]) => rank(a) - rank(b))
     .map(([label, group]) => {
       const heading = label === NOT_CHECKED ? '⚪ Not checked' : `${DAY_EMOJI[label] ?? '🔵'} ${escapeHtml(label)}`
-      const list = group.map((s) => `${s.isNew ? '🆕 ' : ''}${escapeHtml(s.name)} (${s.distanceMi.toFixed(1)} mi)`)
-      return `${heading}: ${list.join(', ')}`
+      const list = group.map((s) => `  ${s.isNew ? '🆕 ' : ''}${escapeHtml(s.name)} (${s.distanceMi.toFixed(1)} mi)`)
+      return [`${heading}:`, ...list].join('\n')
     })
 }
 
@@ -40,7 +40,7 @@ export function stockMessage({ group, colors, gone, sound }: StockMessage): Outg
     `<b>📱 ${escapeHtml(`${group.modelName} ${group.capacity.toUpperCase()}`)}</b>`,
     ...(colors.length === 0 ? ['🔴 Sold out everywhere'] : sections),
     ...(gone.length > 0
-      ? [`🔴 Gone: ${gone.map((g) => `${escapeHtml(g.colorName)} at ${escapeHtml(g.storeName)}`).join(', ')}`]
+      ? [['🔴 Gone:', ...gone.map((g) => `  ${escapeHtml(g.colorName)} at ${escapeHtml(g.storeName)}`)].join('\n')]
       : []),
   ].join('\n\n')
   return {

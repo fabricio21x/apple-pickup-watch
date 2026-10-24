@@ -62,10 +62,45 @@ describe('stock message', () => {
         '<b>📱 iPhone 18 Pro Max 256GB</b>',
         '',
         '<b>Black</b>',
-        '🟢 Today: West 14th Street (0.7 mi)',
-        '🟡 Tomorrow: Grand Central (1.2 mi)',
+        '🟢 Today:',
+        '  West 14th Street (0.7 mi)',
+        '🟡 Tomorrow:',
+        '  Grand Central (1.2 mi)',
       ].join('\n'),
     )
+  })
+
+  it('puts each store on its own line under its heading, and each gone store under Gone', () => {
+    const { text } = stockMessage(
+      message({
+        colors: [
+          color({
+            stores: [
+              store({ name: 'Miami Worldcenter', distanceMi: 2.7, isNew: true }),
+              store({ store: 'R095', name: 'Brickell City Centre', distanceMi: 2.9 }),
+              store({ store: 'R415', name: 'Dadeland', distanceMi: 8.1, label: 'Tomorrow' }),
+            ],
+          }),
+        ],
+        gone: [
+          { colorName: 'Silver', storeName: 'Fifth Avenue' },
+          { colorName: 'Blue', storeName: 'SoHo' },
+        ],
+      }),
+    )
+
+    expect(text.split('\n').slice(3)).toEqual([
+      '<b>Black</b>',
+      '🟢 Today:',
+      '  🆕 Miami Worldcenter (2.7 mi)',
+      '  Brickell City Centre (2.9 mi)',
+      '🟡 Tomorrow:',
+      '  Dadeland (8.1 mi)',
+      '',
+      '🔴 Gone:',
+      '  Silver at Fifth Avenue',
+      '  Blue at SoHo',
+    ])
   })
 
   it('puts Other color beside an other-color heading', () => {
@@ -88,7 +123,7 @@ describe('stock message', () => {
       }),
     )
 
-    expect(text).toContain('🟢 Today: West 14th Street (0.7 mi), 🆕 Fifth Avenue (2.0 mi)')
+    expect(text).toContain('🟢 Today:\n  West 14th Street (0.7 mi)\n  🆕 Fifth Avenue (2.0 mi)')
   })
 
   it('gives any other Apple label its own 🔵 line', () => {
@@ -96,7 +131,7 @@ describe('stock message', () => {
       message({ colors: [color({ stores: [store({ name: 'SoHo', label: 'Available Thu 10/30' })] })] }),
     )
 
-    expect(text).toContain('🔵 Available Thu 10/30: SoHo (0.7 mi)')
+    expect(text).toContain('🔵 Available Thu 10/30:\n  SoHo (0.7 mi)')
     expect(text).not.toContain('Today')
   })
 
@@ -111,8 +146,8 @@ describe('stock message', () => {
       }),
     )
 
-    expect(text).toContain('🟢 Today: West 14th Street (0.7 mi)')
-    expect(text).toContain('⚪ Not checked: Grand Central (1.2 mi)')
+    expect(text).toContain('🟢 Today:\n  West 14th Street (0.7 mi)')
+    expect(text).toContain('⚪ Not checked:\n  Grand Central (1.2 mi)')
   })
 
   it('names the colors and stores that went out on a 🔴 Gone line', () => {
@@ -126,7 +161,7 @@ describe('stock message', () => {
       }),
     )
 
-    expect(text).toContain('🔴 Gone: Black at Fifth Avenue, Silver at SoHo')
+    expect(text).toContain('🔴 Gone:\n  Black at Fifth Avenue\n  Silver at SoHo')
     expect(text).not.toContain('Sold out')
   })
 
@@ -134,7 +169,7 @@ describe('stock message', () => {
     const out = stockMessage(message({ sound: false, colors: [], gone: [{ colorName: 'Black', storeName: 'SoHo' }] }))
 
     expect(out.text).toContain('🔴 Sold out everywhere')
-    expect(out.text).toContain('🔴 Gone: Black at SoHo')
+    expect(out.text).toContain('🔴 Gone:\n  Black at SoHo')
     expect(out.buttons).toBeUndefined()
   })
 
@@ -183,16 +218,16 @@ describe('stock message', () => {
     expect(buttons?.[0]?.text).toBe(`🛒 Buy ${nasty}`)
   })
 
-  it('stays under 4096 characters for 4 colors x 12 stores with the longest store names', () => {
+  it('stays under 4096 characters for 4 colors x 11 stores with the longest store names, plus a gone store per color', () => {
     const longName = (i: number) => `Apple Store with a very long & rather "unusual" mall name ${String(i).padStart(2, '0')}`
-    const stores = Array.from({ length: 12 }, (_, i) =>
+    const stores = Array.from({ length: 11 }, (_, i) =>
       store({ store: `R${100 + i}`, name: longName(i), distanceMi: 10 + i, isNew: true }),
     )
-    const colors = ['Cosmic Orange', 'Deep Blue Titanium', 'Natural Titanium', 'Desert Titanium'].map((colorName) =>
-      color({ colorName, role: 'other', stores }),
-    )
+    const colorNames = ['Cosmic Orange', 'Deep Blue Titanium', 'Natural Titanium', 'Desert Titanium']
+    const colors = colorNames.map((colorName) => color({ colorName, role: 'other', stores }))
+    const gone = colorNames.map((colorName) => ({ colorName, storeName: longName(99) }))
 
-    const { text } = stockMessage(message({ colors }))
+    const { text } = stockMessage(message({ colors, gone }))
 
     expect(lengthAsTelegram(text)).toBeGreaterThan(3000)
     expect(lengthAsTelegram(text)).toBeLessThan(4096)
