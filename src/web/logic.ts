@@ -112,7 +112,7 @@ export function lanUrls(urls: string[]): string[] {
   return urls.filter((u) => !LOOPBACK_HOST.test(new URL(u).hostname))
 }
 
-export type LanStatus = 'off' | 'live' | 'pending-on' | 'pending-off'
+type LanStatus = 'off' | 'live' | 'pending-on' | 'pending-off'
 
 export function lanStatus({ enabled, restartRequired }: Pick<StateDto['lan'], 'enabled' | 'restartRequired'>): LanStatus {
   if (restartRequired) return enabled ? 'pending-on' : 'pending-off'
