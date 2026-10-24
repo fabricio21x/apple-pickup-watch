@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { StateDto } from '../shared/types'
-import { formatTime, type Act } from './App'
+import type { Act } from './App'
 import { api, ApiError } from './api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,9 +18,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { lanUrls, telegramErrorText, timeLeft, tokenLabel } from './logic'
+import { formatTime, lanUrls, telegramErrorText, timeLeft, tokenLabel } from './logic'
 
-export function SettingsStrip({ state, act }: { state: StateDto; act: Act }) {
+export function Settings({ state, act }: { state: StateDto; act: Act }) {
   return (
     <Card>
       <CardHeader>
@@ -126,7 +126,7 @@ function TokenSetting({ token, act }: { token: StateDto['token']; act: Act }) {
             aria-label="cURL command"
             value={curl}
             onChange={(e) => setCurl(e.target.value)}
-            className="h-40 field-sizing-fixed overflow-y-auto font-mono text-xs break-all"
+            className="h-40 field-sizing-fixed resize-none overflow-y-auto font-mono text-base break-all md:text-base"
           />
           {error && (
             <p role="alert" className="text-sm break-words text-destructive">
