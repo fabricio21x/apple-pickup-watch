@@ -194,9 +194,9 @@ function LanSetting({ lan, act }: { lan: StateDto['lan']; act: Act }) {
               ? 'Not available yet: the change takes effect after restarting the monitor.'
               : 'Still available to other devices until you restart the monitor.'}
           </p>
-          <p className="break-all">
+          <p className="break-words">
             Restart the monitor (stop and rerun <code>npm start</code>, or{' '}
-            <code>launchctl kickstart -k gui/$UID/com.pickup-watch</code> when it runs as a LaunchAgent).
+            <code className="break-all">launchctl kickstart -k gui/$UID/com.pickup-watch</code> when it runs as a LaunchAgent).
           </p>
           {status === 'pending-on' && urls.length > 0 && (
             <div>
