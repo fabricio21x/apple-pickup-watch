@@ -134,9 +134,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:28-30, 32 (grouping, sound, other colors), 56-57, 59-60, 62 (no repeats, Today/Tomorrow alone sends nothing); design.md decisions 3 (case-insensitive label), 6 (grouped send pass, not-checked stores, non-retryable 4xx skips a group, role check at commit). Change C1.
 - Files: `src/server/domain.ts` (`stockMessages` replaces `orderEvents`, `pickupFrom`), `src/server/monitor.ts` (per-group send pass and commit), `src/shared/types.ts` (`StockMessage`), `test/domain.test.ts`, `test/monitor.test.ts`
 - Depends on: T15
-- Status: todo
-- Review:
-- Notes: Remove `orderEvents` and the per-event pass. Until T17, `telegram.ts` may render a `StockMessage` as plain text.
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Non-blocking (r-1 and r-2 are folded into T17, which touches monitor.ts): r-1 the commit also role-checks deletes, so a pair whose role flips while its out message is in flight keeps its row and repeats the out line next check (src/server/monitor.ts:149; deletes should match part and store only); r-2 the message is rebuilt before the up-to-1.1 s gap sleep, so a store turned off during the sleep can still be sent (src/server/monitor.ts:118; rebuild after the sleep); no monitor-level test feeds a store missing from the response through to 'not checked' (src/server/monitor.ts:215); an event whose part left the catalog is dropped silently every check (src/server/domain.ts:110, also before T16). Deviations: Telegram 5xx stops the pass like a network error; a 'not checked' store takes name and distance from `[...db.listStores(), ...outcome.stores]` with the response winning; interim plain text with one button for the first color until T17; `OutgoingMessage.silent` sends `disable_notification`; the monitor test's Apple fake answers every requested part.
 
 ### T17: HTML Telegram messages with per-color buy buttons
 - Serves: spec.md:29, 31, 34, 59, 61, 63 (format, buttons, styled health/token/start/test messages); design.md decision 25. Change C1, C2.
@@ -144,7 +144,7 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Depends on: T16
 - Status: todo
 - Review:
-- Notes: Remove the single "Open buy page" button and `stockMessage(event, …)`. Only `<b>` appears in text; URLs only in buttons; worst case 4 colors × 12 stores under 4096 characters.
+- Notes: Also fix T16's r-1 (commit deletes match part and store only; inserts keep the role check) and r-2 (rebuild the message after the gap sleep, right before the send), with a test each. Remove the single "Open buy page" button and `stockMessage(event, …)`. Only `<b>` appears in text; URLs only in buttons; worst case 4 colors × 12 stores under 4096 characters.
 
 ### T18: Four-view page with sidebar and bottom tabs
 - Serves: spec.md:35, 55 (parts count and refusal message), 66, 69-71; design.md decisions 18, 24 (over-cap parts in red, "Not checked" on the board). Change C4.
