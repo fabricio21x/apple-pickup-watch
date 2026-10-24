@@ -9,7 +9,7 @@
 - Source: user, walkthrough after the first real run ("ok, did 1 and got bunch of alerts. I think we need to improve that:")
 - Words: A message per part and instead of a button per message we can send the links per store so if iphone 18 pro max 256gb black is available in 10 stores, we can send 1 message with the list of stores and each will be the link for the puchase. We can have them also separated by today or tomorrow, in the same message. We can use html or markdown to format the messages better, lets make use of that. We can add emojis or colors so its easier to differentiate when reading
 - Level: scope
-- Status: planned
+- Status: done
 - Outcome: spec.md Scope (alerts, content, sound, other colors, other messages), acceptance criteria 56-57, 59-60, 62-63 and decision log; design.md decisions 3, 6, 25, Data shapes (`StockMessage`), Test seams, Risks, amendment panel. Amended to one buy button per color after the panel (staff-engineer-2). Spec and design approved by the owner ("yes", 2026-10-23). Tasks T16, T17.
 
 ## C2: Buy links that preselect color, connectivity and trade-in

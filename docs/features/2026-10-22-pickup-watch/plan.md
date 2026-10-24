@@ -141,9 +141,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:29, 31, 34, 59, 61, 63 (format, buttons, styled health/token/start/test messages); design.md decision 25. Change C1, C2.
 - Files: `src/server/telegram.ts` (`escapeHtml`, `parse_mode: 'HTML'`, `disable_notification`, one inline URL button per in-stock color, styled other messages), `src/server/monitor.ts` (pass `sound`), `test/telegram.test.ts` (new), `test/monitor.test.ts`
 - Depends on: T16
-- Status: todo
-- Review:
-- Notes: Also fix T16's r-1 (commit deletes match part and store only; inserts keep the role check) and r-2 (rebuild the message after the gap sleep, right before the send), with a test each. Remove the single "Open buy page" button and `stockMessage(event, …)`. Only `<b>` appears in text; URLs only in buttons; worst case 4 colors × 12 stores under 4096 characters.
+- Status: done
+- Review: request-changes (after a 429 wait the pass resent the message built before the wait, so a store turned off during it could still be listed), then approve-with-comments; 1 fix round
+- Notes: Also fixed T16's r-1 (commit deletes match part and store only) and r-2 (rebuild after the gap sleep). Non-blocking: the 4096 test covers all-in-stock stores only, and a long Gone line with ~60-character store names could pass 4096 (test/telegram.test.ts:196; real Apple names are short); the first-watched deadline exemption is decided before the gap sleep, so a group that lost its watched event during the sleep can still go out past the cutoff (src/server/monitor.ts:125); a group skipped after a 429 wait doesn't update `lastSentAt` (src/server/monitor.ts:138); the no-button test omits down and token-warning messages (test/telegram.test.ts:236). Deviations: store entries read `Name (0.7 mi)`, comma-separated, lines ordered Today, Tomorrow, other labels, Not checked; `🔴 Gone` also appears on a sold-out message; `OutgoingMessage.buttons` is a flat list, one button per keyboard row; started body "Pickup watch is checking for stock.", test body "Telegram alerts are working."; no test for r-3 of the first review (not observable).
 
 ### T18: Four-view page with sidebar and bottom tabs
 - Serves: spec.md:35, 55 (parts count and refusal message), 66, 69-71; design.md decisions 18, 24 (over-cap parts in red, "Not checked" on the board). Change C4.
