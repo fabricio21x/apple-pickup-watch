@@ -43,3 +43,11 @@
 - Level: scope
 - Status: planned
 - Outcome: spec.md Scope (parts cap), out of scope, acceptance criterion 55 and Facts; design.md decision 24, StateDto, Risks. Spec and design approved by the owner ("yes", 2026-10-23). Tasks T15, T18.
+
+## C6: Stock board can't show other-color rows
+- Date: 2026-10-24
+- Source: a finding from implement, T18
+- Words: `StateDto` carries per-store badges only for watched parts (`watches[].cells`, src/server/api.ts state builder), so the stock board can show other-color siblings only when they are past the cap ("Not checked"). Spec.md:69 asks for Today / Tomorrow / unavailable for each tracked pair, and design decision 18 lists "Other color" rows on the board.
+- Level: build (design.md Data shapes: `WatchDto.cells` holds "its GridCells for the stock board", and `GridCell` carries `part`, so a watch's cells can include its other-color pairs with no new field)
+- Status: open
+- Outcome: pending
