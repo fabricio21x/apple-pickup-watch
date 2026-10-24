@@ -576,6 +576,36 @@ describe('send pass', () => {
     expect(s.alerted()).toEqual([`${SILVER}@R250`])
   })
 
+  it('skips a group whose only store was toggled off during a 429 retry_after wait: no resend, no row', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setStock({ [`${SILVER}@R250`]: 'Today' })
+    s.onSend(() => ({ ok: false, error: { kind: 'http', status: 429 }, retryAfterSec: 3 }))
+    s.onSleep(() => s.db.setStoreEnabled('R250', false))
+
+    await s.monitor.runCheck({ deadline: NOW + 60_000 })
+
+    expect(s.sleeps).toEqual([3000])
+    expect(s.attempts).toHaveLength(1)
+    expect(s.alerted()).toEqual([])
+  })
+
+  it('resends without a store toggled off during a 429 retry_after wait and commits only the stores still on', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${SILVER}@R415`]: 'Today' })
+    let calls = 0
+    s.onSend(() => (++calls === 1 ? { ok: false, error: { kind: 'http', status: 429 }, retryAfterSec: 3 } : { ok: true }))
+    s.onSleep(() => s.db.setStoreEnabled('R415', false))
+
+    await s.monitor.runCheck({ deadline: NOW + 60_000 })
+
+    expect(s.attempts).toHaveLength(2)
+    expect(s.texts()[0]).toContain('Grand Central')
+    expect(s.texts()[1]).not.toContain('Grand Central')
+    expect(s.alerted()).toEqual([`${SILVER}@R250`])
+  })
+
   it('does not wait on a 429 whose retry_after runs past the deadline: nothing committed', async () => {
     const s = await setup()
     s.watch(SILVER)

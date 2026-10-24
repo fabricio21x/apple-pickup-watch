@@ -234,17 +234,19 @@ describe('other messages', () => {
 
 describe('request body', () => {
   const send = async (outgoing: Parameters<ReturnType<typeof createTelegram>['sendMessage']>[0]) => {
+    let url = ''
     let body: unknown
-    const fetchFake = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const fetchFake = (async (input: string | URL | Request, init?: RequestInit) => {
+      url = String(input)
       body = JSON.parse(String(init?.body))
       return new Response('{"ok":true}')
     }) as typeof fetch
     await createTelegram({ fetch: fetchFake, botToken: 'BOT', chatId: '42' }).sendMessage(outgoing)
-    return body
+    return { url, body }
   }
 
   it('asks for HTML parsing and puts each button on its own keyboard row', async () => {
-    const body = await send({
+    const { url, body } = await send({
       text: '<b>hello</b>',
       buttons: [
         { text: '🛒 Buy Black', url: 'https://apple.test/black-unlocked' },
@@ -252,6 +254,7 @@ describe('request body', () => {
       ],
     })
 
+    expect(url).toBe('https://api.telegram.org/botBOT/sendMessage')
     expect(body).toEqual({
       chat_id: '42',
       text: '<b>hello</b>',
@@ -266,7 +269,7 @@ describe('request body', () => {
   })
 
   it('adds disable_notification for a silent message and no keyboard without buttons', async () => {
-    expect(await send({ text: 'hello', silent: true })).toEqual({
+    expect((await send({ text: 'hello', silent: true })).body).toEqual({
       chat_id: '42',
       text: 'hello',
       parse_mode: 'HTML',

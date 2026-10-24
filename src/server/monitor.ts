@@ -110,6 +110,8 @@ export function createMonitor(deps: {
       const live = events.filter((e) => hasPair(tracked, e.pair))
       return stockMessages(live, tracked, observations, db.listAlerted(), db.listParts(), stores)
     }
+    const hasWatchedIn = ({ commit }: { commit: { insert: TrackedPair[] } }) =>
+      commit.insert.some((pair) => pair.role === 'watched')
     let lastSentAt: number | null = null
     let firstWatchedIn = true
     let refused: TelegramError | null = null
@@ -120,9 +122,7 @@ export function createMonitor(deps: {
       let message = lookup()
       if (!message) continue
 
-      const hasWatchedIn = message.commit.insert.some((pair) => pair.role === 'watched')
-      const exempt = firstWatchedIn && hasWatchedIn
-      if (hasWatchedIn) firstWatchedIn = false
+      const exempt = firstWatchedIn && hasWatchedIn(message)
 
       const wait = lastSentAt === null ? 0 : Math.max(0, lastSentAt + SEND_GAP_MS - now())
       if (!exempt && now() + wait > cutoff) return
@@ -131,12 +131,14 @@ export function createMonitor(deps: {
         message = lookup()
         if (!message) continue
       }
+      if (hasWatchedIn(message)) firstWatchedIn = false
 
-      const outgoing = stockMessage(message)
-      let result = await telegram.sendMessage(outgoing)
+      let result = await telegram.sendMessage(stockMessage(message))
       if (!result.ok && result.retryAfterSec !== undefined && now() + result.retryAfterSec * 1000 <= cutoff) {
         await sleep(result.retryAfterSec * 1000)
-        result = await telegram.sendMessage(outgoing)
+        message = lookup()
+        if (!message) continue
+        result = await telegram.sendMessage(stockMessage(message))
       }
       lastSentAt = now()
       if (!result.ok) {
