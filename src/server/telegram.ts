@@ -1,33 +1,30 @@
 import { z } from 'zod'
-import type { CatalogPart, StockEvent, TelegramError, TrackedPair } from '../shared/types'
+import type { StockMessage, TelegramError } from '../shared/types'
 import type { FailureCause, HealthMessage } from './domain'
 
 const TIMEOUT_MS = 10_000
 
-export type OutgoingMessage = { text: string; button?: { text: string; url: string } }
+export type OutgoingMessage = { text: string; button?: { text: string; url: string }; silent?: boolean }
 export type SendResult = { ok: true } | { ok: false; error: TelegramError; retryAfterSec?: number }
 export type Telegram = { sendMessage(message: OutgoingMessage): Promise<SendResult> }
 
-const HEADLINE: Record<StockEvent['kind'], Record<TrackedPair['role'], string>> = {
-  in: { watched: 'In stock', other: 'Other color in stock' },
-  out: { watched: 'Out of stock', other: 'Other color out of stock' },
-}
-
-export function stockMessage(
-  event: StockEvent,
-  part: CatalogPart,
-  store: { name: string; distanceMi: number },
-): OutgoingMessage {
-  const { pair } = event
-  const youWatch = pair.role === 'other' ? ` (you watch ${pair.relatedColors.join(', ')})` : ''
-  const lines = [
-    `${HEADLINE[event.kind][pair.role]}: ${part.title}${youWatch}`,
-    `Store: ${store.name}, ${store.distanceMi.toFixed(1)} mi`,
-  ]
-  if (event.kind === 'out') return { text: lines.join('\n') }
+export function stockMessage({ group, colors, gone, sound }: StockMessage): OutgoingMessage {
+  const sections = colors.map((color) =>
+    [
+      `${color.colorName}${color.role === 'other' ? ' (Other color)' : ''}`,
+      ...color.stores.map((s) => `${s.label}: ${s.name}, ${s.distanceMi.toFixed(1)} mi${s.isNew ? ' (new)' : ''}`),
+    ].join('\n'),
+  )
+  const text = [
+    `${group.modelName} ${group.capacity.toUpperCase()}`,
+    ...(colors.length === 0 ? ['Sold out everywhere'] : sections),
+    ...(gone.length > 0 ? [gone.map((g) => `Out of stock: ${g.colorName} at ${g.storeName}`).join('\n')] : []),
+  ].join('\n\n')
+  const first = colors[0]
   return {
-    text: [...lines, `Pickup: ${event.label ?? 'Available'}`].join('\n'),
-    button: { text: 'Open buy page', url: part.buyUrl },
+    text,
+    ...(first && { button: { text: 'Open buy page', url: first.buyUrl } }),
+    ...(!sound && { silent: true }),
   }
 }
 
@@ -68,10 +65,11 @@ export function createTelegram(deps: {
   const timeoutMs = deps.timeoutMs ?? TIMEOUT_MS
 
   return {
-    async sendMessage({ text, button }) {
+    async sendMessage({ text, button, silent }) {
       const body = {
         chat_id: deps.chatId,
         text,
+        ...(silent && { disable_notification: true }),
         ...(button && { reply_markup: { inline_keyboard: [[{ text: button.text, url: button.url }]] } }),
       }
       let res: Response

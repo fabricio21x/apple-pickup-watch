@@ -20,6 +20,19 @@ export type Observation = { part: PartNumber; store: StoreNumber; pickup: Pickup
 
 export type StockEvent = { kind: 'in' | 'out'; pair: TrackedPair; label?: string }
 
+export type StockMessage = {
+  group: { modelName: string; capacity: string }
+  sound: boolean
+  colors: {
+    colorName: string
+    role: TrackedPair['role']
+    buyUrl: string
+    stores: { store: StoreNumber; name: string; distanceMi: number; label: string | 'not checked'; isNew: boolean }[]
+  }[]
+  gone: { colorName: string; storeName: string }[]
+  commit: { insert: TrackedPair[]; delete: TrackedPair[] }
+}
+
 export type CheckOutcome =
   | {
       ok: true

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { CatalogPart, Observation, StockEvent, TrackedPair } from '../src/shared/types'
+import type { CatalogPart, Observation, StockEvent, StockMessage, TrackedPair } from '../src/shared/types'
 import {
   diff,
   jitterMs,
   nextHealth,
-  orderEvents,
   pickupFrom,
   siblingsOf,
+  stockMessages,
   trackedPairs,
   trackedParts,
 } from '../src/server/domain'
@@ -155,6 +155,10 @@ describe('pickupFrom', () => {
     expect(pickupFrom('available', 'Available Tomorrow')).toEqual({ kind: 'in', label: 'Tomorrow' })
   })
 
+  it.each(['available today', 'AVAILABLE TOMORROW'])('matches the day word in any case: %s', (quote) => {
+    expect(pickupFrom('available', quote)).toEqual({ kind: 'in', label: quote.toLowerCase().includes('today') ? 'Today' : 'Tomorrow' })
+  })
+
   it('labels available with any other quote by the quote itself', () => {
     expect(pickupFrom('available', 'Available Oct 28')).toEqual({ kind: 'in', label: 'Available Oct 28' })
   })
@@ -212,27 +216,166 @@ describe('diff', () => {
   })
 })
 
-describe('orderEvents', () => {
-  const watched = (p: string): TrackedPair => ({ part: p, store: 'R1', role: 'watched' })
-  const other = (p: string): TrackedPair => ({ part: p, store: 'R1', role: 'other', relatedColors: ['Black'] })
+describe('stockMessages', () => {
+  const watched = (p: string, s: string): TrackedPair => ({ part: p, store: s, role: 'watched' })
+  const other = (p: string, s: string): TrackedPair => ({ part: p, store: s, role: 'other', relatedColors: ['Black'] })
+  const inEvent = (pair: TrackedPair, label = 'Today'): StockEvent => ({ kind: 'in', pair, label })
+  const outEvent = (pair: TrackedPair): StockEvent => ({ kind: 'out', pair })
+  const inStock = (p: string, s: string, label = 'Today'): Observation => ({ part: p, store: s, pickup: { kind: 'in', label } })
+  const outOfStock = (p: string, s: string): Observation => ({ part: p, store: s, pickup: { kind: 'out' } })
+  const alertedAt = (...keys: string[]) => keys.map((k) => ({ part: k.split('@')[0] ?? '', store: k.split('@')[1] ?? '' }))
+  const storeMeta = [
+    { store: 'R1', name: 'Store One', distanceMi: 0.5 },
+    { store: 'R2', name: 'Store Two', distanceMi: 1.5 },
+    { store: 'R3', name: 'Store Three', distanceMi: 3 },
+  ]
+  const build = (
+    events: StockEvent[],
+    tracked: TrackedPair[],
+    observations: Observation[],
+    alerted: { part: string; store: string }[] = [],
+  ): StockMessage[] => stockMessages(events, tracked, observations, alerted, catalog, storeMeta)
 
-  it('sends watched in, other in, watched out, then other out, keeping order within a group', () => {
-    const events: StockEvent[] = [
-      { kind: 'out', pair: other('o-out-1') },
-      { kind: 'out', pair: watched('w-out-1') },
-      { kind: 'in', pair: other('o-in-1'), label: 'Today' },
-      { kind: 'in', pair: watched('w-in-1'), label: 'Today' },
-      { kind: 'in', pair: watched('w-in-2'), label: 'Today' },
-      { kind: 'out', pair: other('o-out-2') },
-    ]
-    expect(orderEvents(events).map((e) => e.pair.part)).toEqual([
-      'w-in-1',
-      'w-in-2',
-      'o-in-1',
-      'w-out-1',
-      'o-out-1',
-      'o-out-2',
+  it('sends one message per model and storage with every color that came in, each store new, and sound', () => {
+    const tracked = ['R1', 'R2', 'R3'].flatMap((s) => [watched('PRO-256-BLK', s), watched('PRO-256-BLU', s)])
+    const observations = tracked.map((p) => inStock(p.part, p.store))
+
+    const messages = build(tracked.map((p) => inEvent(p)), tracked, observations)
+
+    expect(messages).toHaveLength(1)
+    const [message] = messages
+    expect(message?.group).toEqual({ modelName: 'iPhone 18 Pro', capacity: '256gb' })
+    expect(message?.sound).toBe(true)
+    expect(message?.colors.map((c) => c.colorName)).toEqual(['Black', 'Blue'])
+    expect(message?.colors[0]?.stores).toEqual([
+      { store: 'R1', name: 'Store One', distanceMi: 0.5, label: 'Today', isNew: true },
+      { store: 'R2', name: 'Store Two', distanceMi: 1.5, label: 'Today', isNew: true },
+      { store: 'R3', name: 'Store Three', distanceMi: 3, label: 'Today', isNew: true },
     ])
+    expect(message?.colors[0]?.buyUrl).toBe('https://www.apple.com/shop/buy-iphone/iphone-18-pro')
+    expect(message?.gone).toEqual([])
+    expect(message?.commit.insert).toHaveLength(6)
+    expect(message?.commit.delete).toEqual([])
+  })
+
+  it('lists every store still in stock with only the store that came in marked new', () => {
+    const tracked = ['R1', 'R2', 'R3'].map((s) => watched('PRO-256-BLK', s))
+    const observations = tracked.map((p) => inStock(p.part, p.store, p.store === 'R2' ? 'Tomorrow' : 'Today'))
+
+    const [message] = build([inEvent(watched('PRO-256-BLK', 'R3'))], tracked, observations, alertedAt('PRO-256-BLK@R1', 'PRO-256-BLK@R2'))
+
+    expect(message?.colors[0]?.stores.map((s) => [s.store, s.label, s.isNew])).toEqual([
+      ['R1', 'Today', false],
+      ['R2', 'Tomorrow', false],
+      ['R3', 'Today', true],
+    ])
+    expect(message?.commit.insert).toEqual([watched('PRO-256-BLK', 'R3')])
+  })
+
+  it('sends a silent message with the stores left and the ones that went out when stores only go out', () => {
+    const tracked = ['R1', 'R2'].map((s) => watched('PRO-256-BLK', s))
+    const observations = [inStock('PRO-256-BLK', 'R1'), outOfStock('PRO-256-BLK', 'R2')]
+
+    const [message] = build([outEvent(watched('PRO-256-BLK', 'R2'))], tracked, observations, alertedAt('PRO-256-BLK@R1', 'PRO-256-BLK@R2'))
+
+    expect(message?.sound).toBe(false)
+    expect(message?.colors.map((c) => [c.colorName, c.stores.map((s) => s.store)])).toEqual([['Black', ['R1']]])
+    expect(message?.gone).toEqual([{ colorName: 'Black', storeName: 'Store Two' }])
+    expect(message?.commit).toEqual({ insert: [], delete: [watched('PRO-256-BLK', 'R2')] })
+  })
+
+  it('has no colors, meaning sold out everywhere, when the last in-stock store goes out', () => {
+    const tracked = [watched('PRO-256-BLK', 'R1')]
+
+    const [message] = build([outEvent(tracked[0] as TrackedPair)], tracked, [outOfStock('PRO-256-BLK', 'R1')], alertedAt('PRO-256-BLK@R1'))
+
+    expect(message?.colors).toEqual([])
+    expect(message?.gone).toEqual([{ colorName: 'Black', storeName: 'Store One' }])
+  })
+
+  it('lists watched colors first, then the other colors, each in catalog order', () => {
+    const tracked = [watched('PRO-256-ORG', 'R1'), other('PRO-256-BLK', 'R1'), watched('PRO-256-BLU', 'R1')]
+    const observations = tracked.map((p) => inStock(p.part, p.store))
+
+    const [message] = build([inEvent(tracked[1] as TrackedPair)], tracked, observations, alertedAt('PRO-256-ORG@R1', 'PRO-256-BLU@R1'))
+
+    expect(message?.colors.map((c) => [c.colorName, c.role])).toEqual([
+      ['Blue', 'watched'],
+      ['Orange', 'watched'],
+      ['Black', 'other'],
+    ])
+  })
+
+  it('splits models and storages into separate messages', () => {
+    const tracked = [watched('PRO-256-BLK', 'R1'), watched('PRO-512-BLK', 'R1'), watched('MAX-256-BLK', 'R1')]
+    const observations = tracked.map((p) => inStock(p.part, p.store))
+
+    const messages = build(tracked.map((p) => inEvent(p)), tracked, observations)
+
+    expect(messages.map((m) => [m.group.modelName, m.group.capacity])).toEqual([
+      ['iPhone 18 Pro', '256gb'],
+      ['iPhone 18 Pro', '512gb'],
+      ['iPhone 18 Pro Max', '256gb'],
+    ])
+  })
+
+  it('orders groups with a watched in event, then only other-color in events, then out-only, ties in catalog order', () => {
+    const tracked = [
+      watched('PRO-256-BLK', 'R1'),
+      other('PRO-512-BLK', 'R1'),
+      watched('MAX-256-BLK', 'R1'),
+      watched('DUO-256-BLK', 'R1'),
+    ]
+    const events = [
+      outEvent(tracked[0] as TrackedPair),
+      inEvent(tracked[3] as TrackedPair),
+      inEvent(tracked[1] as TrackedPair),
+      inEvent(tracked[2] as TrackedPair),
+    ]
+    const observations = [
+      outOfStock('PRO-256-BLK', 'R1'),
+      inStock('PRO-512-BLK', 'R1'),
+      inStock('MAX-256-BLK', 'R1'),
+      inStock('DUO-256-BLK', 'R1'),
+    ]
+
+    const messages = build(events, tracked, observations, alertedAt('PRO-256-BLK@R1'))
+
+    expect(messages.map((m) => `${m.group.modelName} ${m.group.capacity}`)).toEqual([
+      'iPhone 18 Pro Max 256gb',
+      'iPhone Duo 256gb',
+      'iPhone 18 Pro 512gb',
+      'iPhone 18 Pro 256gb',
+    ])
+  })
+
+  it('lists an alerted store missing from the response as not checked, never new, and does not say sold out', () => {
+    const tracked = [watched('PRO-256-BLK', 'R1'), watched('PRO-256-BLK', 'R2')]
+
+    const [message] = build([outEvent(tracked[0] as TrackedPair)], tracked, [outOfStock('PRO-256-BLK', 'R1')], alertedAt('PRO-256-BLK@R1', 'PRO-256-BLK@R2'))
+
+    expect(message?.colors).toHaveLength(1)
+    expect(message?.colors[0]?.stores).toEqual([
+      { store: 'R2', name: 'Store Two', distanceMi: 1.5, label: 'not checked', isNew: false },
+    ])
+    expect(message?.gone).toEqual([{ colorName: 'Black', storeName: 'Store One' }])
+  })
+
+  it('lists an alerted part missing from the response as not checked', () => {
+    const tracked = [watched('PRO-256-BLK', 'R1'), other('PRO-256-BLU', 'R1')]
+
+    const [message] = build([inEvent(tracked[0] as TrackedPair)], tracked, [inStock('PRO-256-BLK', 'R1')], alertedAt('PRO-256-BLU@R1'))
+
+    expect(message?.colors.map((c) => [c.colorName, c.stores.map((s) => s.label)])).toEqual([
+      ['Black', ['Today']],
+      ['Blue', ['not checked']],
+    ])
+  })
+
+  it('builds no message while nothing changed, even when a pair moves between Today and Tomorrow', () => {
+    const tracked = [watched('PRO-256-BLK', 'R1')]
+
+    expect(build([], tracked, [inStock('PRO-256-BLK', 'R1', 'Today')], alertedAt('PRO-256-BLK@R1'))).toEqual([])
   })
 })
 

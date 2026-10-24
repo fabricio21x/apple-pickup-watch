@@ -5,6 +5,7 @@ import type {
   PartNumber,
   Pickup,
   StockEvent,
+  StockMessage,
   StoreNumber,
   TrackedPair,
 } from '../shared/types'
@@ -64,7 +65,8 @@ export function trackedPairs(watches: Watch[], catalog: CatalogPart[], stores: S
 
 export function pickupFrom(pickupDisplay: string, pickupSearchQuote: string): Pickup {
   if (pickupDisplay !== 'available') return { kind: 'out' }
-  const day = ['Today', 'Tomorrow'].find((word) => pickupSearchQuote.includes(word))
+  const quote = pickupSearchQuote.toLowerCase()
+  const day = ['Today', 'Tomorrow'].find((word) => quote.includes(word.toLowerCase()))
   return { kind: 'in', label: day ?? pickupSearchQuote }
 }
 
@@ -82,10 +84,89 @@ export function diff(tracked: TrackedPair[], observations: Observation[], alerte
   return events
 }
 
-const eventRank = (e: StockEvent) => (e.kind === 'in' ? 0 : 2) + (e.pair.role === 'watched' ? 0 : 1)
+const groupKey = (c: { modelName: string; capacity: string }) => `${c.modelName}|${c.capacity}`
 
-export function orderEvents(events: StockEvent[]): StockEvent[] {
-  return [...events].sort((a, b) => eventRank(a) - eventRank(b))
+type StoreInfo = Extract<CheckOutcome, { ok: true }>['stores'][number]
+
+export function stockMessages(
+  events: StockEvent[],
+  tracked: TrackedPair[],
+  observations: Observation[],
+  alerted: AlertedRow[],
+  catalog: CatalogPart[],
+  stores: StoreInfo[],
+): StockMessage[] {
+  const parts = new Map(catalog.map((c, order) => [c.part, { ...c, order }]))
+  const groupOrder = new Map<string, number>()
+  catalog.forEach((c, order) => groupOrder.set(groupKey(c), groupOrder.get(groupKey(c)) ?? order))
+  const storeInfo = new Map(stores.map((s) => [s.store, s]))
+  const observed = new Map(observations.map((o) => [pairKey(o), o.pickup]))
+  const alertedKeys = new Set(alerted.map(pairKey))
+  const newKeys = new Set(events.filter((e) => e.kind === 'in').map((e) => pairKey(e.pair)))
+
+  const groups = new Map<string, { group: StockMessage['group']; events: StockEvent[] }>()
+  for (const event of events) {
+    const part = parts.get(event.pair.part)
+    if (!part) continue
+    const entry = groups.get(groupKey(part)) ?? {
+      group: { modelName: part.modelName, capacity: part.capacity },
+      events: [],
+    }
+    entry.events.push(event)
+    groups.set(groupKey(part), entry)
+  }
+
+  function colorsOf(key: string): StockMessage['colors'] {
+    const byPart = new Map<PartNumber, { order: number; color: StockMessage['colors'][number] }>()
+    for (const pair of tracked) {
+      const part = parts.get(pair.part)
+      const store = storeInfo.get(pair.store)
+      if (!part || !store || groupKey(part) !== key) continue
+      const pickup = observed.get(pairKey(pair))
+      const unseen = alertedKeys.has(pairKey(pair)) ? 'not checked' : null
+      const label = pickup ? (pickup.kind === 'in' ? pickup.label : null) : unseen
+      if (label === null) continue
+      const entry = byPart.get(pair.part) ?? {
+        order: part.order,
+        color: { colorName: part.colorName, role: pair.role, buyUrl: part.buyUrl, stores: [] },
+      }
+      entry.color.stores.push({
+        store: store.store,
+        name: store.name,
+        distanceMi: store.distanceMi,
+        label,
+        isNew: newKeys.has(pairKey(pair)),
+      })
+      byPart.set(pair.part, entry)
+    }
+    return [...byPart.values()]
+      .sort((a, b) => Number(b.color.role === 'watched') - Number(a.color.role === 'watched') || a.order - b.order)
+      .map(({ color }) => ({ ...color, stores: color.stores.sort((a, b) => a.distanceMi - b.distanceMi) }))
+  }
+
+  const rank = (groupEvents: StockEvent[]) => {
+    if (groupEvents.some((e) => e.kind === 'in' && e.pair.role === 'watched')) return 0
+    return groupEvents.some((e) => e.kind === 'in') ? 1 : 2
+  }
+
+  return [...groups]
+    .sort(
+      ([ka, a], [kb, b]) => rank(a.events) - rank(b.events) || (groupOrder.get(ka) ?? 0) - (groupOrder.get(kb) ?? 0),
+    )
+    .map(([key, { group, events: groupEvents }]) => ({
+      group,
+      sound: groupEvents.some((e) => e.kind === 'in'),
+      colors: colorsOf(key),
+      gone: groupEvents.flatMap((e) => {
+        const part = parts.get(e.pair.part)
+        const store = storeInfo.get(e.pair.store)
+        return e.kind === 'out' && part && store ? [{ colorName: part.colorName, storeName: store.name }] : []
+      }),
+      commit: {
+        insert: groupEvents.filter((e) => e.kind === 'in').map((e) => e.pair),
+        delete: groupEvents.filter((e) => e.kind === 'out').map((e) => e.pair),
+      },
+    }))
 }
 
 export function nextHealth(

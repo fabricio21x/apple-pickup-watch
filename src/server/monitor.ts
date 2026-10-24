@@ -15,7 +15,7 @@ import {
   diff,
   jitterMs,
   nextHealth,
-  orderEvents,
+  stockMessages,
   trackedPairs,
   trackedParts,
   type FailureCause,
@@ -94,51 +94,59 @@ export function createMonitor(deps: {
   let tokenOutcome: { key: string; status: TokenOutcome } | null = null
 
   const currentTracked = () => trackedPairs(db.listWatches(), db.listParts(), db.listStores())
-  const isTracked = (pair: TrackedPair) =>
-    currentTracked().some((t) => t.part === pair.part && t.store === pair.store && t.role === pair.role)
+  const hasPair = (tracked: TrackedPair[], pair: TrackedPair) =>
+    tracked.some((t) => t.part === pair.part && t.store === pair.store && t.role === pair.role)
+  const isRefusal = ({ kind, status = 0 }: TelegramError) => kind === 'http' && status >= 400 && status < 500 && status !== 429
 
   async function loadCatalog() {
     const result = await apple.fetchCatalog()
     if (result.ok) db.upsertParts(result.value)
   }
 
-  async function sendPass(events: StockEvent[], stores: StoreMeta[], deadline: number) {
-    const parts = new Map(db.listParts().map((p) => [p.part, p]))
-    const storeMeta = new Map(stores.map((s) => [s.store, s]))
+  async function sendPass(events: StockEvent[], observations: Observation[], stores: StoreMeta[], deadline: number) {
     const cutoff = deadline - DEADLINE_MARGIN_MS
+    const rebuild = () => {
+      const tracked = currentTracked()
+      const live = events.filter((e) => hasPair(tracked, e.pair))
+      return stockMessages(live, tracked, observations, db.listAlerted(), db.listParts(), stores)
+    }
     let lastSentAt: number | null = null
     let firstWatchedIn = true
+    let refused: TelegramError | null = null
 
-    for (const event of events) {
-      const part = parts.get(event.pair.part)
-      const store = storeMeta.get(event.pair.store)
-      if (!part || !store || !isTracked(event.pair)) continue
+    for (const { group } of rebuild()) {
+      const message = rebuild().find(
+        (m) => m.group.modelName === group.modelName && m.group.capacity === group.capacity,
+      )
+      if (!message) continue
 
-      const isWatchedIn = event.kind === 'in' && event.pair.role === 'watched'
-      const exempt = firstWatchedIn && isWatchedIn
-      if (isWatchedIn) firstWatchedIn = false
+      const hasWatchedIn = message.commit.insert.some((pair) => pair.role === 'watched')
+      const exempt = firstWatchedIn && hasWatchedIn
+      if (hasWatchedIn) firstWatchedIn = false
 
       const wait = lastSentAt === null ? 0 : Math.max(0, lastSentAt + SEND_GAP_MS - now())
       if (!exempt && now() + wait > cutoff) return
       if (wait > 0) await sleep(wait)
 
-      const message = stockMessage(event, part, store)
-      let result = await telegram.sendMessage(message)
+      const outgoing = stockMessage(message)
+      let result = await telegram.sendMessage(outgoing)
       if (!result.ok && result.retryAfterSec !== undefined && now() + result.retryAfterSec * 1000 <= cutoff) {
         await sleep(result.retryAfterSec * 1000)
-        result = await telegram.sendMessage(message)
+        result = await telegram.sendMessage(outgoing)
       }
       lastSentAt = now()
       if (!result.ok) {
         state.telegramLastError = result.error
-        return
+        if (!isRefusal(result.error)) return
+        refused = result.error
+        continue
       }
-      state.telegramLastError = null
+      state.telegramLastError = refused
 
       db.transaction(() => {
-        if (!isTracked(event.pair)) return
-        if (event.kind === 'in') db.insertAlerted(event.pair)
-        else db.deleteAlerted(event.pair)
+        const tracked = currentTracked()
+        message.commit.insert.filter((pair) => hasPair(tracked, pair)).forEach((pair) => db.insertAlerted(pair))
+        message.commit.delete.filter((pair) => hasPair(tracked, pair)).forEach((pair) => db.deleteAlerted(pair))
       })
     }
   }
@@ -203,8 +211,8 @@ export function createMonitor(deps: {
     state.observations = outcome.observations
     state.stores = outcome.stores
 
-    const events = orderEvents(diff(currentTracked(), outcome.observations, db.listAlerted()))
-    await sendPass(events, outcome.stores, deadline)
+    const events = diff(currentTracked(), outcome.observations, db.listAlerted())
+    await sendPass(events, outcome.observations, [...db.listStores(), ...outcome.stores], deadline)
     await recordHealth(outcome, token.expiresAt)
     return outcome
   }

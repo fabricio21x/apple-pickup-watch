@@ -14,13 +14,19 @@ const SILVER = 'MJQ84LL/A'
 const BURGUNDY = 'MJQ94LL/A'
 const SILVER_URL = 'https://www.apple.com/shop/buy-iphone/iphone-18-pro/6.3-inch-display-512gb-silver'
 const BURGUNDY_URL = 'https://www.apple.com/shop/buy-iphone/iphone-18-pro/6.3-inch-display-512gb-burgundy'
+const MAX_1TB = 'MJWE4LL/A'
+const PRO_256_BLACK = 'MJQ34LL/A'
+const PRO_256_SILVER = 'MJQ44LL/A'
+const OTHER_GROUPS = ['MJQ34LL/A', 'MJQD4LL/A', 'MJQH4LL/A', 'MJW54LL/A', 'MJW94LL/A', MAX_1TB, 'MJWJ4LL/A']
 const TOKEN: AppleToken = { dssid2: 'fake-dssid2', shldBtCk: 'id|1|payload|sig', userAgent: 'Mozilla/5.0 test', expiresAt: NOW + HOUR }
 
 type Stock = 'Today' | 'Tomorrow' | 'unavailable' | 'default'
 
-function fulfillmentBody(stock: Record<string, Stock>): string {
+function fulfillmentBody(stock: Record<string, Stock>, requested: string[] = []): string {
   const body = JSON.parse(fixture('fulfillment-all-out.json'))
   for (const store of body.body.content.pickupMessage.stores) {
+    const template = Object.values<{ pickupDisplay: string; pickupSearchQuote: string }>(store.partsAvailability)[0]
+    for (const part of requested) store.partsAvailability[part] ??= { ...template }
     for (const [part, availability] of Object.entries<{ pickupDisplay: string; pickupSearchQuote: string }>(
       store.partsAvailability,
     )) {
@@ -35,6 +41,9 @@ function fulfillmentBody(stock: Record<string, Stock>): string {
   }
   return JSON.stringify(body)
 }
+
+const inStockAt = (part: string, stores: string[]) =>
+  Object.fromEntries(stores.map((store) => [`${part}@${store}`, 'Today' as const]))
 
 async function setup(options: { appleSeconds?: number } = {}) {
   let t = NOW
@@ -59,7 +68,8 @@ async function setup(options: { appleSeconds?: number } = {}) {
     t += (options.appleSeconds ?? 0) * 1000
     if (networkDown) throw new TypeError('fetch failed')
     if (fulfillmentStatus !== 200) return new Response(fixture('rejected-541.html'), { status: fulfillmentStatus })
-    return new Response(fulfillmentBody(stock))
+    const requested = [...new URL(url).searchParams].filter(([k]) => k.startsWith('parts.')).map(([, v]) => v)
+    return new Response(fulfillmentBody(stock, requested))
   }) as typeof fetch
   const apple = createApple({ fetch: fetchFake, now })
 
@@ -119,11 +129,63 @@ describe('in-stock and out-of-stock alerts', () => {
 
     expect(s.attempts).toHaveLength(1)
     const [message] = s.attempts
-    expect(message?.text).toContain('iPhone 18 Pro 512GB Silver')
+    expect(message?.text).toContain('iPhone 18 Pro 512GB')
+    expect(message?.text).toContain('Silver')
     expect(message?.text).toContain('West 14th Street')
     expect(message?.text).toContain('0.7 mi')
     expect(message?.text).toContain('Today')
     expect(message?.button?.url).toBe(SILVER_URL)
+    expect(message?.silent).toBeUndefined()
+    expect(s.alerted()).toEqual([`${SILVER}@R250`])
+  })
+
+  it('sends one message with sound for two colors coming in at three stores, every store new', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.watch(BURGUNDY)
+    s.setStock({ ...inStockAt(SILVER, ['R250', 'R415', 'R032']), ...inStockAt(BURGUNDY, ['R250', 'R415', 'R032']) })
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(1)
+    const [message] = s.attempts
+    for (const word of ['Silver', 'Burgundy', 'West 14th Street', 'Grand Central', 'SoHo']) expect(message?.text).toContain(word)
+    expect(message?.text.match(/\(new\)/g)).toHaveLength(6)
+    expect(message?.silent).toBeUndefined()
+    expect(s.alerted()).toHaveLength(6)
+  })
+
+  it('lists all four stores when a fourth comes in later, with only the fourth marked new', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setStock(inStockAt(SILVER, ['R250', 'R415', 'R032']))
+    await s.monitor.runCheck()
+
+    s.setStock(inStockAt(SILVER, ['R250', 'R415', 'R032', 'R095']))
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(2)
+    const text = s.texts()[1] ?? ''
+    for (const word of ['West 14th Street', 'Grand Central', 'SoHo', 'Fifth Avenue']) expect(text).toContain(word)
+    expect(text.match(/\(new\)/g)).toHaveLength(1)
+    expect(text).toMatch(/Fifth Avenue.*\(new\)/)
+  })
+
+  it('sends one silent message with the stores left and the one that went out when a store goes out', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setStock(inStockAt(SILVER, ['R250', 'R415']))
+    await s.monitor.runCheck()
+
+    s.setStock(inStockAt(SILVER, ['R250']))
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(2)
+    const message = s.attempts[1]
+    expect(message?.silent).toBe(true)
+    expect(message?.text).toContain('Today: West 14th Street')
+    expect(message?.text).toContain('Out of stock: Silver at Grand Central')
+    expect(message?.text).not.toMatch(/sold out/i)
     expect(s.alerted()).toEqual([`${SILVER}@R250`])
   })
 
@@ -149,10 +211,11 @@ describe('in-stock and out-of-stock alerts', () => {
     await s.monitor.runCheck()
 
     expect(s.texts()).toHaveLength(2)
-    expect(s.texts()[0]).toMatch(/in stock/i)
-    expect(s.texts()[1]).toMatch(/out of stock/i)
-    expect(s.texts()[1]).toContain('iPhone 18 Pro 512GB Silver')
+    expect(s.texts()[0]).toContain('Today: West 14th Street')
+    expect(s.texts()[1]).toMatch(/sold out everywhere/i)
+    expect(s.texts()[1]).toContain('iPhone 18 Pro 512GB')
     expect(s.texts()[1]).toContain('West 14th Street')
+    expect(s.attempts[1]?.silent).toBe(true)
     expect(s.alerted()).toEqual([])
   })
 
@@ -195,7 +258,7 @@ describe('in-stock and out-of-stock alerts', () => {
     await s.monitor.runCheck()
 
     expect(s.texts()).toHaveLength(2)
-    expect(s.texts()[1]).toMatch(/out of stock/i)
+    expect(s.texts()[1]).toMatch(/sold out everywhere/i)
   })
 
   it('does not alert for a store that is toggled off', async () => {
@@ -212,7 +275,7 @@ describe('in-stock and out-of-stock alerts', () => {
 })
 
 describe('other colors', () => {
-  it('sends an "Other color" message naming the watched color, with the same fields and the sibling buy-page button', async () => {
+  it('sends an "Other color" message with the same fields and the sibling buy-page button', async () => {
     const s = await setup()
     s.watch(SILVER, true)
     s.setStock({ [`${BURGUNDY}@R250`]: 'Today' })
@@ -221,16 +284,28 @@ describe('other colors', () => {
 
     expect(s.attempts).toHaveLength(1)
     const message = s.attempts[0]
-    expect(message?.text).toContain('Other color')
-    expect(message?.text).toContain('(you watch Silver)')
-    expect(message?.text).toContain('iPhone 18 Pro 512GB Burgundy')
+    expect(message?.text).toContain('Burgundy (Other color)')
+    expect(message?.text).toContain('iPhone 18 Pro 512GB')
     expect(message?.text).toContain('West 14th Street')
     expect(message?.text).toContain('0.7 mi')
     expect(message?.text).toContain('Today')
     expect(message?.button?.url).toBe(BURGUNDY_URL)
   })
 
-  it('sends one "Other color" out-of-stock message when the sibling goes back out', async () => {
+  it('lists a watched color and its other color in one message, the other labelled "Other color"', async () => {
+    const s = await setup()
+    s.watch(SILVER, true)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${BURGUNDY}@R250`]: 'Tomorrow' })
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(1)
+    expect(s.texts()[0]).toMatch(/^Silver$/m)
+    expect(s.texts()[0]).toContain('Burgundy (Other color)')
+    expect(s.alerted()).toEqual([`${SILVER}@R250`, `${BURGUNDY}@R250`])
+  })
+
+  it('sends one silent message naming the other color when it goes back out', async () => {
     const s = await setup()
     s.watch(SILVER, true)
     s.setStock({ [`${BURGUNDY}@R250`]: 'Today' })
@@ -240,9 +315,8 @@ describe('other colors', () => {
     await s.monitor.runCheck()
 
     expect(s.texts()).toHaveLength(2)
-    expect(s.texts()[1]).toContain('Other color')
-    expect(s.texts()[1]).toMatch(/out of stock/i)
-    expect(s.texts()[1]).toContain('(you watch Silver)')
+    expect(s.texts()[1]).toContain('Out of stock: Burgundy at West 14th Street')
+    expect(s.attempts[1]?.silent).toBe(true)
   })
 
   it('sends no other-color message when the watch has the switch off', async () => {
@@ -283,7 +357,7 @@ describe('other colors', () => {
 
     expect(s.attempts).toHaveLength(2)
     expect(s.texts()[1]).not.toContain('Other color')
-    expect(s.texts()[1]).toContain('iPhone 18 Pro 512GB Burgundy')
+    expect(s.texts()[1]).toContain('Burgundy')
     expect(s.alerted()).toEqual([`${BURGUNDY}@R250`])
   })
 })
@@ -302,7 +376,7 @@ describe('reconcile', () => {
     s.monitor.reconcile()
 
     expect(s.alerted()).toEqual([`${SILVER}@R250`])
-    expect(s.attempts).toHaveLength(3)
+    expect(s.attempts).toHaveLength(1)
   })
 })
 
@@ -386,14 +460,12 @@ describe('snapshot', () => {
 })
 
 describe('send pass', () => {
-  const inStockAt = (part: string, stores: string[]) =>
-    Object.fromEntries(stores.map((store) => [`${part}@${store}`, 'Today' as const]))
-  const STORES = ['R250', 'R415', 'R032', 'R095', 'R251', 'R582', 'R654', 'R594']
+  const textStarts = (text: string | undefined, heading: string) => expect(text?.startsWith(heading)).toBe(true)
 
   it('sends one message at a time at least 1.1 s apart', async () => {
     const s = await setup()
-    s.watch(SILVER)
-    s.setStock(inStockAt(SILVER, ['R250', 'R415', 'R032']))
+    OTHER_GROUPS.slice(0, 3).forEach((part) => s.watch(part))
+    s.setStock(Object.fromEntries(OTHER_GROUPS.slice(0, 3).map((part) => [`${part}@R250`, 'Today' as const])))
 
     await s.monitor.runCheck()
 
@@ -403,45 +475,86 @@ describe('send pass', () => {
     expect((c ?? 0) - (b ?? 0)).toBeGreaterThanOrEqual(1100)
   })
 
-  it('sends watched in-stock, then other-color in-stock, then watched out-of-stock, then other-color out-of-stock', async () => {
+  it('sends groups with a watched in-stock color, then only other-color in-stock, then out-only', async () => {
     const s = await setup()
-    s.watch(SILVER, true)
-    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${BURGUNDY}@R415`]: 'Today' })
+    s.watch(SILVER)
+    s.watch(PRO_256_BLACK, true)
+    s.watch(MAX_1TB)
+    s.setStock({ [`${SILVER}@R250`]: 'Today' })
     await s.monitor.runCheck()
     s.attempts.length = 0
 
-    s.setStock({ [`${SILVER}@R032`]: 'Today', [`${BURGUNDY}@R032`]: 'Today' })
+    s.setStock({ [`${PRO_256_SILVER}@R250`]: 'Today', [`${MAX_1TB}@R250`]: 'Today' })
     await s.monitor.runCheck()
 
-    expect(s.texts()).toHaveLength(4)
-    expect(s.texts()[0]).toMatch(/^In stock/)
-    expect(s.texts()[1]).toMatch(/^Other color in stock/)
-    expect(s.texts()[2]).toMatch(/^Out of stock/)
-    expect(s.texts()[3]).toMatch(/^Other color out of stock/)
+    expect(s.texts()).toHaveLength(3)
+    textStarts(s.texts()[0], 'iPhone 18 Pro Max 1TB')
+    textStarts(s.texts()[1], 'iPhone 18 Pro 256GB')
+    textStarts(s.texts()[2], 'iPhone 18 Pro 512GB')
+    expect(s.texts()[2]).toMatch(/sold out everywhere/i)
   })
 
-  it('stops at the first send failure, commits nothing, and sends the events again next check', async () => {
+  it('skips a group Telegram refuses with a 4xx, sends the next, and keeps the refused rows for the next check', async () => {
     const s = await setup()
     s.watch(SILVER)
-    s.setStock(inStockAt(SILVER, ['R250', 'R415']))
-    s.onSend(() => ({ ok: false, error: { kind: 'http', status: 400, description: 'Bad Request: chat not found' } }))
+    s.watch(MAX_1TB)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${MAX_1TB}@R250`]: 'Today' })
+    let calls = 0
+    s.onSend(() =>
+      ++calls === 1 ? { ok: false, error: { kind: 'http', status: 400, description: 'Bad Request: chat not found' } } : { ok: true },
+    )
 
     await s.monitor.runCheck()
 
-    expect(s.attempts).toHaveLength(1)
-    expect(s.alerted()).toEqual([])
+    expect(s.attempts).toHaveLength(2)
+    expect(s.alerted()).toEqual([`${MAX_1TB}@R250`])
     expect(s.monitor.snapshot().telegramLastError).toEqual({
       kind: 'http',
       status: 400,
       description: 'Bad Request: chat not found',
     })
 
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(3)
+    expect(s.texts()[2]).toContain('Silver')
+    expect(s.alerted()).toEqual([`${SILVER}@R250`, `${MAX_1TB}@R250`])
+    expect(s.monitor.snapshot().telegramLastError).toBeNull()
+  })
+
+  it('stops the pass on a network error, commits nothing, and resends every group next check', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.watch(MAX_1TB)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${MAX_1TB}@R250`]: 'Today' })
+    s.onSend(() => ({ ok: false, error: { kind: 'network' } }))
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(1)
+    expect(s.alerted()).toEqual([])
+    expect(s.monitor.snapshot().telegramLastError).toEqual({ kind: 'network' })
+
     s.onSend(() => ({ ok: true }))
     await s.monitor.runCheck()
 
     expect(s.attempts).toHaveLength(3)
-    expect(s.alerted()).toEqual([`${SILVER}@R250`, `${SILVER}@R415`])
+    expect(s.alerted()).toEqual([`${SILVER}@R250`, `${MAX_1TB}@R250`])
     expect(s.monitor.snapshot().telegramLastError).toBeNull()
+  })
+
+  it('stops the pass on a 429 that cannot be waited out', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.watch(MAX_1TB)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${MAX_1TB}@R250`]: 'Today' })
+    s.onSend(() => ({ ok: false, error: { kind: 'http', status: 429 }, retryAfterSec: 40 }))
+
+    await s.monitor.runCheck({ deadline: NOW + 30_000 })
+
+    expect(s.sleeps).toEqual([])
+    expect(s.attempts).toHaveLength(1)
+    expect(s.alerted()).toEqual([])
   })
 
   it('waits retry_after once on a 429 when it fits before the deadline, then sends', async () => {
@@ -473,8 +586,9 @@ describe('send pass', () => {
 
   it('ends the pass 5 s before the deadline', async () => {
     const s = await setup()
-    s.watch(SILVER)
-    s.setStock(inStockAt(SILVER, STORES))
+    const parts = [SILVER, ...OTHER_GROUPS]
+    parts.forEach((part) => s.watch(part))
+    s.setStock(Object.fromEntries(parts.map((part) => [`${part}@R250`, 'Today' as const])))
 
     await s.monitor.runCheck({ deadline: NOW + 10_000 })
 
@@ -482,22 +596,24 @@ describe('send pass', () => {
     expect(s.attempts.every((m) => m.at <= NOW + 5000)).toBe(true)
   })
 
-  it('still sends the first watched in-stock event when a slow Apple call used up the time before the deadline', async () => {
+  it('still sends the first watched in-stock message when a slow Apple call used up the time before the deadline', async () => {
     const s = await setup({ appleSeconds: 28 })
-    s.watch(SILVER, true)
-    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${BURGUNDY}@R250`]: 'Today' })
+    s.watch(SILVER)
+    s.watch(MAX_1TB)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${MAX_1TB}@R250`]: 'Today' })
 
     await s.monitor.runCheck({ deadline: NOW + 30_000 })
 
     expect(s.attempts).toHaveLength(1)
-    expect(s.texts()[0]).not.toContain('Other color')
+    expect(s.texts()[0]).toContain('Silver')
     expect(s.alerted()).toEqual([`${SILVER}@R250`])
   })
 
-  it('skips an event whose store was toggled off during the pass: no message, no row', async () => {
+  it('skips a group whose only store was toggled off during the pass: no message, no row', async () => {
     const s = await setup()
     s.watch(SILVER)
-    s.setStock(inStockAt(SILVER, ['R250', 'R415']))
+    s.watch(MAX_1TB)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${MAX_1TB}@R415`]: 'Today' })
     s.onSend(() => {
       s.db.setStoreEnabled('R415', false)
       return { ok: true }
@@ -509,10 +625,53 @@ describe('send pass', () => {
     expect(s.alerted()).toEqual([`${SILVER}@R250`])
   })
 
-  it('drops a stale other-color event when its color becomes watched during the pass, and the next check sends the watched alert', async () => {
+  it('commits only the rows of a message whose store was toggled off while it was being delivered', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${SILVER}@R415`]: 'Today' })
+    s.onSend(() => {
+      s.db.setStoreEnabled('R415', false)
+      return { ok: true }
+    })
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(1)
+    expect(s.alerted()).toEqual([`${SILVER}@R250`])
+  })
+
+  it('drops a stale other-color event before its group is sent when the color becomes watched, and the next check sends it as watched', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.watch(PRO_256_BLACK, true)
+    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${PRO_256_SILVER}@R250`]: 'Today' })
+    let first = true
+    s.onSend(() => {
+      if (first) {
+        first = false
+        s.watch(PRO_256_SILVER)
+        s.monitor.reconcile({ newlyWatched: [PRO_256_SILVER] })
+      }
+      return { ok: true }
+    })
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(1)
+    expect(s.alerted()).toEqual([`${SILVER}@R250`])
+
+    await s.monitor.runCheck()
+
+    expect(s.attempts).toHaveLength(2)
+    textStarts(s.texts()[1], 'iPhone 18 Pro 256GB')
+    expect(s.texts()[1]).not.toContain('Other color')
+    expect(s.alerted()).toEqual([`${PRO_256_SILVER}@R250`, `${SILVER}@R250`])
+  })
+
+  it('skips the insert of a color that became watched while its "Other color" message was in flight, and the next check sends it as watched', async () => {
     const s = await setup()
     s.watch(SILVER, true)
-    s.setStock({ [`${SILVER}@R250`]: 'Today', [`${BURGUNDY}@R250`]: 'Today' })
+    s.setStock({ [`${BURGUNDY}@R250`]: 'Today' })
     let first = true
     s.onSend(() => {
       if (first) {
@@ -526,15 +685,15 @@ describe('send pass', () => {
     await s.monitor.runCheck()
 
     expect(s.attempts).toHaveLength(1)
-    expect(s.texts()[0]).not.toContain('Other color')
-    expect(s.alerted()).toEqual([`${SILVER}@R250`])
+    expect(s.texts()[0]).toContain('Burgundy (Other color)')
+    expect(s.alerted()).toEqual([])
 
     await s.monitor.runCheck()
 
     expect(s.attempts).toHaveLength(2)
-    expect(s.texts()[1]).toMatch(/^In stock/)
-    expect(s.texts()[1]).toContain('iPhone 18 Pro 512GB Burgundy')
-    expect(s.alerted()).toEqual([`${SILVER}@R250`, `${BURGUNDY}@R250`])
+    expect(s.texts()[1]).toContain('Burgundy')
+    expect(s.texts()[1]).not.toContain('Other color')
+    expect(s.alerted()).toEqual([`${BURGUNDY}@R250`])
   })
 
   it('writes no row when the store is toggled off while its message is being delivered', async () => {
@@ -982,6 +1141,14 @@ describe('telegram', () => {
       text: 'hello',
       reply_markup: { inline_keyboard: [[{ text: 'Open', url: SILVER_URL }]] },
     })
+  })
+
+  it('asks Telegram for no notification sound on a silent message', async () => {
+    const { calls, telegram } = telegramWith(async () => new Response('{"ok":true}'))
+
+    await telegram.sendMessage({ text: 'hello', silent: true })
+
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ chat_id: '42', text: 'hello', disable_notification: true })
   })
 
   it('still returns ok when cancelling the success response body rejects', async () => {
