@@ -157,9 +157,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:69 (Today / Tomorrow / unavailable for each tracked pair); design.md decision 18 ("Other color" rows), Data shapes (`WatchDto.cells`, `GridCell.part`). Change C6.
 - Files: `src/server/api.ts` (state builder: a watch's `cells` cover all its tracked pairs, its other-color siblings included when its switch is on), `src/web/logic.ts` (`stockBoard` takes other-color cells from `watches[].cells`, de-duplicated by part and store, marked "Other color"), `test/api.test.ts`, `test/web-logic.test.ts`
 - Depends on: T17, T18
-- Status: todo
-- Review:
-- Notes: Also fold in T18's r-1 (clear the error banner when the view changes) and r-2 (one exported in-stock rule in logic.ts used by StockBoard.tsx and `stockRank`). Found by T18: until this lands, the board shows other colors only when they are past the cap.
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Also folded in T18's r-1 (banner clears on view change) and r-2 (one exported `isInStock`). Non-blocking: nothing tests the banner clearing (src/web/App.tsx:51; no component tests in the project). Deviations: over-cap siblings are left out of `cells` and shown as "Not checked" only from `partsCount.unchecked`; the old "12 cells" assertion now counts only the watched part's cells.
 
 ## Final review
 - Status: todo
