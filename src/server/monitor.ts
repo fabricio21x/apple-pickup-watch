@@ -10,7 +10,17 @@ import type {
 } from '../shared/types'
 import type { Apple, AppleToken } from './apple'
 import type { Db, Health } from './db'
-import { diff, jitterMs, nextHealth, orderEvents, trackedPairs, type FailureCause, type HealthResult } from './domain'
+import {
+  PARTS_CAP,
+  diff,
+  jitterMs,
+  nextHealth,
+  orderEvents,
+  trackedPairs,
+  trackedParts,
+  type FailureCause,
+  type HealthResult,
+} from './domain'
 import {
   healthMessage,
   startedMessage,
@@ -170,14 +180,14 @@ export function createMonitor(deps: {
     const tracked = currentTracked()
     if (!token || !zip || tracked.length === 0) return { skipped: true }
 
-    const partsWith = (role: 'watched' | 'other') => [
-      ...new Set(tracked.filter((t) => t.role === role).map((t) => t.part)),
-    ]
+    const watches = db.listWatches()
+    const watchedSet = new Set(watches.map((w) => w.part))
+    const checked = trackedParts(watches, db.listParts()).slice(0, PARTS_CAP)
     const outcome = await apple.check({
       zip,
       token,
-      watchedParts: partsWith('watched'),
-      otherParts: partsWith('other'),
+      watchedParts: checked.filter((p) => watchedSet.has(p)),
+      otherParts: checked.filter((p) => !watchedSet.has(p)),
       enabledStores: [...new Set(tracked.map((t) => t.store))],
     })
 

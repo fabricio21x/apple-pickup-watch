@@ -30,12 +30,10 @@ export function siblingsOf(catalog: CatalogPart[], part: PartNumber): CatalogPar
   )
 }
 
-export function trackedPairs(watches: Watch[], catalog: CatalogPart[], stores: StoreToggle[]): TrackedPair[] {
-  const enabled = stores.filter((s) => s.enabled).map((s) => s.store)
+export const PARTS_CAP = 20
+
+function relatedColorsBySibling(watches: Watch[], catalog: CatalogPart[]): Map<PartNumber, string[]> {
   const watchedParts = new Set(watches.map((w) => w.part))
-
-  const watched = watches.flatMap((w) => enabled.map((store): TrackedPair => ({ part: w.part, store, role: 'watched' })))
-
   const relatedBySibling = new Map<PartNumber, string[]>()
   for (const w of watches.filter((w) => w.otherColors)) {
     const color = catalog.find((c) => c.part === w.part)?.colorName
@@ -45,7 +43,19 @@ export function trackedPairs(watches: Watch[], catalog: CatalogPart[], stores: S
       relatedBySibling.set(sibling.part, [...(relatedBySibling.get(sibling.part) ?? []), color])
     }
   }
-  const other = [...relatedBySibling].flatMap(([part, relatedColors]) =>
+  return relatedBySibling
+}
+
+export function trackedParts(watches: Watch[], catalog: CatalogPart[]): PartNumber[] {
+  const others = relatedColorsBySibling(watches, catalog)
+  return [...watches.map((w) => w.part), ...catalog.map((c) => c.part).filter((part) => others.has(part))]
+}
+
+export function trackedPairs(watches: Watch[], catalog: CatalogPart[], stores: StoreToggle[]): TrackedPair[] {
+  const enabled = stores.filter((s) => s.enabled).map((s) => s.store)
+
+  const watched = watches.flatMap((w) => enabled.map((store): TrackedPair => ({ part: w.part, store, role: 'watched' })))
+  const other = [...relatedColorsBySibling(watches, catalog)].flatMap(([part, relatedColors]) =>
     enabled.map((store): TrackedPair => ({ part, store, role: 'other', relatedColors })),
   )
 

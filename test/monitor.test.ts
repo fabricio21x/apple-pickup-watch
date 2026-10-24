@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApple, type Apple, type AppleToken } from '../src/server/apple'
 import { openDb } from '../src/server/db'
+import { PARTS_CAP } from '../src/server/domain'
 import { createMonitor } from '../src/server/monitor'
 import { createTelegram, type OutgoingMessage, type SendResult, type Telegram } from '../src/server/telegram'
 
@@ -316,6 +317,26 @@ describe('check inputs', () => {
     expect(url).toContain(`parts.0=${encodeURIComponent(SILVER)}`)
     expect(url).toContain(encodeURIComponent(BURGUNDY))
     expect(url).toContain('location=10001')
+  })
+
+  it('never requests more than 20 parts and keeps every watched part ahead of the other colors', async () => {
+    const s = await setup()
+    const silver = s.db.listParts().find((p) => p.part === SILVER)
+    if (!silver) throw new Error('fixture catalog lost the silver part')
+    const extras = Array.from({ length: 25 }, (_, i) => ({ ...silver, part: `EXTRA${i}LL/A`, colorName: `Extra ${i}` }))
+    s.db.upsertParts([...s.db.listParts(), ...extras])
+    s.watch(SILVER, true)
+    s.watch(BURGUNDY, false)
+
+    await s.monitor.runCheck()
+
+    const requested = [...(s.fulfillmentUrls[0] ?? '').matchAll(/parts\.\d+=([^&]+)/g)].map((m) => decodeURIComponent(m[1] ?? ''))
+    expect(requested).toHaveLength(PARTS_CAP)
+    expect(requested.slice(0, 2)).toEqual([SILVER, BURGUNDY])
+    const others = s.db
+      .listParts()
+      .filter((p) => p.modelName === silver.modelName && p.capacity === silver.capacity && ![SILVER, BURGUNDY].includes(p.part))
+    expect(requested.slice(2)).toEqual(others.slice(0, PARTS_CAP - 2).map((p) => p.part))
   })
 
   it.each([

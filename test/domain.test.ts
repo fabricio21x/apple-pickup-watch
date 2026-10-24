@@ -8,6 +8,7 @@ import {
   pickupFrom,
   siblingsOf,
   trackedPairs,
+  trackedParts,
 } from '../src/server/domain'
 
 const part = (p: string, modelName: string, capacity: string, colorName: string): CatalogPart => ({
@@ -44,6 +45,34 @@ describe('siblingsOf', () => {
         .map((p) => p.part)
         .sort(),
     ).toEqual(['PRO-256-BLU', 'PRO-256-ORG'])
+  })
+})
+
+describe('trackedParts', () => {
+  it('lists watched parts first, then other-color parts in catalog order', () => {
+    const parts = trackedParts(
+      [
+        { part: 'PRO-256-ORG', otherColors: true },
+        { part: 'DUO-256-BLK', otherColors: false },
+      ],
+      catalog,
+    )
+    expect(parts).toEqual(['PRO-256-ORG', 'DUO-256-BLK', 'PRO-256-BLK', 'PRO-256-BLU'])
+  })
+
+  it('counts a sibling of two watches once and never counts a watched part as other', () => {
+    const parts = trackedParts(
+      [
+        { part: 'PRO-256-BLK', otherColors: true },
+        { part: 'PRO-256-BLU', otherColors: true },
+      ],
+      catalog,
+    )
+    expect(parts).toEqual(['PRO-256-BLK', 'PRO-256-BLU', 'PRO-256-ORG'])
+  })
+
+  it('adds no other-color parts for a watch with the switch off', () => {
+    expect(trackedParts([{ part: 'PRO-256-BLK', otherColors: false }], catalog)).toEqual(['PRO-256-BLK'])
   })
 })
 

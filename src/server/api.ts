@@ -7,6 +7,7 @@ import { z } from 'zod'
 import type { GridCell, HealthDto, StateDto, TelegramError } from '../shared/types'
 import { parseCurl, parseTokenBody, type Apple } from './apple'
 import type { Db } from './db'
+import { PARTS_CAP, trackedParts, type Watch } from './domain'
 import type { Monitor } from './monitor'
 import type { Telegram } from './telegram'
 
@@ -133,6 +134,7 @@ export function createApi(deps: ApiDeps) {
       if (!pickup) return 'Not checked'
       return pickup.kind === 'in' ? pickup.label : 'Unavailable'
     }
+    const tracked = trackedParts(db.listWatches(), db.listParts())
     const lanUrls = settings.lanEnabled ? lanHosts().map((h) => `http://${h}:${deps.port}`) : []
 
     const state: StateDto = {
@@ -161,6 +163,7 @@ export function createApi(deps: ApiDeps) {
         lastError: snapshot.telegramLastError && telegramErrorDto(snapshot.telegramLastError),
       },
       health: healthDto(snapshot.health),
+      partsCount: { tracked: tracked.length, cap: PARTS_CAP, unchecked: tracked.slice(PARTS_CAP) },
     }
     return c.json(state)
   })
@@ -189,12 +192,22 @@ export function createApi(deps: ApiDeps) {
     return c.json({ ok: true })
   })
 
+  const refuseOverCap = (c: Context, after: Watch[]) => {
+    const catalog = db.listParts()
+    const before = trackedParts(db.listWatches(), catalog).length
+    const tracked = trackedParts(after, catalog).length
+    if (tracked > PARTS_CAP && tracked > before) {
+      fail(c, 409, 'parts-cap', { cap: PARTS_CAP, tracked, adding: tracked - before })
+    }
+  }
+
   app.post('/api/watches', async (c) => {
     const { parts } = await readBody(c, WatchesBody)
     const catalog = new Set(db.listParts().map((p) => p.part))
     if (!parts.every((p) => catalog.has(p))) return fail(c, 400, 'unknown-part')
     const watched = new Set(db.listWatches().map((w) => w.part))
     const added = [...new Set(parts)].filter((p) => !watched.has(p))
+    refuseOverCap(c, [...db.listWatches(), ...added.map((part) => ({ part, otherColors: true }))])
     db.transaction(() => added.forEach((p) => db.addWatch(p, true, now())))
     monitor.reconcile({ newlyWatched: added })
     return c.json({ ok: true })
@@ -214,7 +227,9 @@ export function createApi(deps: ApiDeps) {
 
   app.patch('/api/watches/:part', async (c) => {
     const { otherColors } = await readBody(c, OtherColorsBody)
-    db.setOtherColors(requireWatch(c), otherColors)
+    const part = requireWatch(c)
+    if (otherColors) refuseOverCap(c, db.listWatches().map((w) => (w.part === part ? { ...w, otherColors } : w)))
+    db.setOtherColors(part, otherColors)
     monitor.reconcile()
     return c.json({ ok: true })
   })

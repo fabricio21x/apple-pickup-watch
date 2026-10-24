@@ -247,6 +247,20 @@ describe('GET /api/state', () => {
     expect(state.stores.find((x) => x.store === 'R250')).toMatchObject({ enabled: false, name: 'West 14th Street' })
   })
 
+  it('reports no tracked parts against the cap of 20 before any watch', async () => {
+    const s = await setup()
+
+    expect((await s.state()).partsCount).toEqual({ tracked: 0, cap: 20, unchecked: [] })
+  })
+
+  it('lists the tracked parts past the cut of 20 as unchecked, in catalog order', async () => {
+    const s = await setup()
+    const parts = seedModel(s, 'Cap A', 22)
+    s.watch(parts[0] ?? '')
+
+    expect((await s.state()).partsCount).toEqual({ tracked: 22, cap: 20, unchecked: parts.slice(20) })
+  })
+
   it('reports the interval, token status and Telegram status', async () => {
     const s = await withZipAndToken()
 
@@ -513,6 +527,118 @@ describe('watches', () => {
     const res = await s.call(`/api/watches/${encodeURIComponent(SILVER)}`, { method: 'PATCH', body: { otherColors: false } })
 
     expect(res.status).toBe(404)
+  })
+})
+
+function seedModel(s: Awaited<ReturnType<typeof setup>>, model: string, count: number): string[] {
+  const parts = Array.from({ length: count }, (_, i) => ({
+    part: `${model}-${i}`,
+    modelName: model,
+    capacity: '1tb',
+    colorName: `Color ${i}`,
+    title: `${model} 1TB Color ${i}`,
+    buyUrl: 'https://www.apple.com/shop/buy-iphone/iphone-18-pro',
+  }))
+  s.db.upsertParts([...s.db.listParts(), ...parts])
+  return parts.map((p) => p.part)
+}
+
+const post = (s: Awaited<ReturnType<typeof setup>>, parts: string[]) =>
+  s.call('/api/watches', { method: 'POST', body: { parts } })
+
+describe('parts cap', () => {
+  it('accepts a watch that brings the tracked parts to exactly 20', async () => {
+    const s = await setup()
+    const [first] = seedModel(s, 'Cap A', 20)
+
+    const res = await post(s, [first ?? ''])
+
+    expect(res.status).toBe(200)
+    expect((await s.state()).partsCount.tracked).toBe(20)
+  })
+
+  it('refuses a watch that would take the tracked parts to 21 and writes nothing', async () => {
+    const s = await setup()
+    const [first] = seedModel(s, 'Cap A', 21)
+
+    const res = await post(s, [first ?? ''])
+
+    expect(res.status).toBe(409)
+    expect(res.json).toEqual({ error: 'parts-cap', cap: 20, tracked: 21, adding: 21 })
+    expect(s.db.listWatches()).toEqual([])
+  })
+
+  it('counts only the parts the change adds to what is already tracked', async () => {
+    const s = await setup()
+    const [b] = seedModel(s, 'Cap B', 3)
+    const [a] = seedModel(s, 'Cap A', 19)
+    s.watch(b ?? '')
+
+    const res = await post(s, [a ?? ''])
+
+    expect(res.status).toBe(409)
+    expect(res.json).toEqual({ error: 'parts-cap', cap: 20, tracked: 22, adding: 19 })
+    expect(s.db.listWatches()).toEqual([{ part: b, otherColors: true }])
+  })
+
+  it('refuses turning other colors on when it would go past 20 and leaves the switch off', async () => {
+    const s = await setup()
+    const [a] = seedModel(s, 'Cap A', 1)
+    const [b] = seedModel(s, 'Cap B', 20)
+    s.watch(a ?? '', false)
+    s.watch(b ?? '', false)
+
+    const res = await s.call(`/api/watches/${encodeURIComponent(b ?? '')}`, { method: 'PATCH', body: { otherColors: true } })
+
+    expect(res.status).toBe(409)
+    expect(res.json).toEqual({ error: 'parts-cap', cap: 20, tracked: 21, adding: 19 })
+    expect(s.db.listWatches().find((w) => w.part === b)?.otherColors).toBe(false)
+  })
+
+  it('lets other colors be switched on up to exactly 20', async () => {
+    const s = await setup()
+    const [a] = seedModel(s, 'Cap A', 20)
+    s.watch(a ?? '', false)
+
+    const res = await s.call(`/api/watches/${encodeURIComponent(a ?? '')}`, { method: 'PATCH', body: { otherColors: true } })
+
+    expect(res.status).toBe(200)
+    expect((await s.state()).partsCount.tracked).toBe(20)
+  })
+
+  it('never refuses removing a watch or switching other colors off, even over the cap', async () => {
+    const s = await setup()
+    const [a] = seedModel(s, 'Cap A', 20)
+    const [b] = seedModel(s, 'Cap B', 20)
+    s.watch(a ?? '')
+    s.watch(b ?? '')
+
+    const off = await s.call(`/api/watches/${encodeURIComponent(a ?? '')}`, { method: 'PATCH', body: { otherColors: false } })
+    const removed = await s.call(`/api/watches/${encodeURIComponent(b ?? '')}`, { method: 'DELETE' })
+
+    expect([off.status, removed.status]).toEqual([200, 200])
+    expect(s.db.listWatches()).toEqual([{ part: a, otherColors: false }])
+  })
+
+  it('answers ok when a watch already tracked is posted again over the cap', async () => {
+    const s = await setup()
+    const [a] = seedModel(s, 'Cap A', 22)
+    s.watch(a ?? '')
+
+    expect((await post(s, [a ?? ''])).status).toBe(200)
+  })
+
+  it('inserts nothing and deletes no alerted row when an already watched part is posted again', async () => {
+    const s = await setup()
+    await s.saveZip()
+    s.watch(SILVER, false)
+    s.db.insertAlerted({ part: SILVER, store: 'R250' })
+
+    const res = await post(s, [SILVER])
+
+    expect(res.status).toBe(200)
+    expect(s.db.listWatches()).toEqual([{ part: SILVER, otherColors: false }])
+    expect(s.db.listAlerted()).toEqual([{ part: SILVER, store: 'R250' }])
   })
 })
 

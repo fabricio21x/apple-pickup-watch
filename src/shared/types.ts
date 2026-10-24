@@ -67,4 +67,5 @@ export type StateDto = {
   token: { status: TokenStatus; expiresAt: number | null }
   telegram: { configured: boolean; lastError: TelegramError | null }
   health: HealthDto
+  partsCount: { tracked: number; cap: 20; unchecked: PartNumber[] }
 }
