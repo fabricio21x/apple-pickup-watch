@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import type { GridCell, PartNumber, StateDto, WatchDto } from '../shared/types'
+import type { PartNumber, StateDto, WatchDto } from '../shared/types'
 import type { Act } from './App'
 import { api } from './api'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -11,12 +10,33 @@ import { Switch } from '@/components/ui/switch'
 import { buildCatalogTree, partsToWatch } from './logic'
 
 export function Watches({ state, act }: { state: StateDto; act: Act }) {
+  const { tracked, cap, unchecked } = state.partsCount
+
   return (
     <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Watching</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm">
+            {tracked} / {cap} parts tracked
+          </p>
+          {unchecked.length > 0 && (
+            <p className="text-sm text-destructive">Over the cap: {unchecked.length} other-color parts not checked</p>
+          )}
+          {state.watches.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing watched yet. Pick configurations below.</p>
+          ) : (
+            <ul className="divide-y">
+              {state.watches.map((w) => (
+                <WatchRow key={w.part} watch={w} state={state} act={act} />
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
       <Picker state={state} act={act} />
-      {state.watches.map((w) => (
-        <WatchCard key={w.part} watch={w} state={state} act={act} />
-      ))}
     </>
   )
 }
@@ -35,8 +55,7 @@ function Picker({ state, act }: { state: StateDto; act: Act }) {
   }
 
   const add = async () => {
-    await act(() => api.addWatches(toWatch))
-    setSelected(new Set())
+    if (await act(() => api.addWatches(toWatch))) setSelected(new Set())
   }
 
   return (
@@ -79,48 +98,28 @@ function Picker({ state, act }: { state: StateDto; act: Act }) {
   )
 }
 
-const inStock = (badge: GridCell['badge']) => badge !== 'Unavailable' && badge !== 'Not checked'
-
-function WatchCard({ watch, state, act }: { watch: WatchDto; state: StateDto; act: Act }) {
+function WatchRow({ watch, state, act }: { watch: WatchDto; state: StateDto; act: Act }) {
   const title = state.parts.find((p) => p.part === watch.part)?.title ?? watch.part
-  const storeName = (store: string) => state.stores.find((s) => s.store === store)?.name ?? store
   const switchId = `other-${watch.part}`
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="break-words">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {watch.cells.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No stores enabled.</p>
-        ) : (
-          <ul className="divide-y">
-            {watch.cells.map((c) => (
-              <li key={c.store} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <span className="min-w-0 break-words">{storeName(c.store)}</span>
-                <Badge
-                  variant={inStock(c.badge) ? 'default' : c.badge === 'Unavailable' ? 'secondary' : 'outline'}
-                  className="shrink-0"
-                >
-                  {c.badge}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="flex items-center gap-2">
+    <li className="space-y-2 py-3">
+      <p className="text-sm font-medium break-words">{title}</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           <Switch
             id={switchId}
             checked={watch.otherColors}
             onCheckedChange={(on) => void act(() => api.setOtherColors(watch.part, on))}
           />
-          <Label htmlFor={switchId}>Also alert for other colors</Label>
+          <Label htmlFor={switchId} className="font-normal">
+            Also alert for other colors
+          </Label>
         </div>
         <Button variant="outline" size="sm" onClick={() => void act(() => api.removeWatch(watch.part))}>
           Remove
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </li>
   )
 }

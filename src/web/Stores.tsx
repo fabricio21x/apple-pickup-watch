@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
-export function Location({ state, act }: { state: StateDto; act: Act }) {
+export function Stores({ state, act }: { state: StateDto; act: Act }) {
   const [zip, setZip] = useState(state.zip ?? '')
   const [busy, setBusy] = useState(false)
 
@@ -22,7 +22,7 @@ export function Location({ state, act }: { state: StateDto; act: Act }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Location</CardTitle>
+        <CardTitle>Stores</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <form onSubmit={submit} className="flex items-end gap-2">

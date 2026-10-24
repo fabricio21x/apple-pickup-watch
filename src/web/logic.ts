@@ -1,6 +1,68 @@
-import type { CatalogPart, HealthDto, PartNumber, TelegramError, TokenStatus } from '../shared/types'
+import type {
+  CatalogPart,
+  GridCell,
+  HealthDto,
+  PartNumber,
+  StateDto,
+  StoreDto,
+  TelegramError,
+  TokenStatus,
+  TrackedPair,
+} from '../shared/types'
 
-export type ApiErrorBody = { error: string; fields?: string[]; reason?: string }
+export type ApiErrorBody = {
+  error: string
+  fields?: string[]
+  reason?: string
+  cap?: number
+  tracked?: number
+  adding?: number
+}
+
+export const VIEWS = ['stock', 'watches', 'stores', 'settings'] as const
+export type View = (typeof VIEWS)[number]
+
+export const viewFromHash = (hash: string): View => VIEWS.find((v) => hash === `#/${v}`) ?? 'stock'
+
+export type StockRow = {
+  part: PartNumber
+  colorName: string
+  role: TrackedPair['role']
+  store: StoreDto
+  badge: GridCell['badge']
+  buyUrl: string
+}
+
+export type StockBlock = { model: string; capacity: string; rows: StockRow[] }
+
+const stockRank = (badge: GridCell['badge']) => (badge === 'Unavailable' ? 1 : badge === 'Not checked' ? 2 : 0)
+
+export function stockBoard({ parts, stores, watches, partsCount }: StateDto): StockBlock[] {
+  const storeById = new Map(stores.map((s) => [s.store, s]))
+  const enabled = stores.filter((s) => s.enabled)
+  const cells = new Map(
+    watches.map((w) => [w.part, w.cells.map((c) => ({ badge: c.badge, store: storeById.get(c.store)! }))]),
+  )
+  const unchecked = new Set(partsCount.unchecked)
+  const blocks: StockBlock[] = []
+  for (const p of parts) {
+    const watched = cells.get(p.part)
+    if (!watched && !unchecked.has(p.part)) continue
+    const role: TrackedPair['role'] = watched ? 'watched' : 'other'
+    const rows = (watched ?? enabled.map((store) => ({ badge: 'Not checked', store }))).map(
+      ({ badge, store }): StockRow => ({ part: p.part, colorName: p.colorName, role, store, badge, buyUrl: p.buyUrl }),
+    )
+    let block = blocks.find((b) => b.model === p.modelName && b.capacity === p.capacity)
+    if (!block) blocks.push((block = { model: p.modelName, capacity: p.capacity, rows: [] }))
+    block.rows.push(...rows)
+  }
+  for (const b of blocks) b.rows.sort((a, c) => stockRank(a.badge) - stockRank(c.badge))
+  const hasStock = (b: StockBlock) => b.rows.some((r) => stockRank(r.badge) === 0)
+  return [...blocks.filter(hasStock), ...blocks.filter((b) => !hasStock(b))]
+}
+
+export const formatTime = (ms: number) =>
+  new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
 
 export type ModelGroup = {
   model: string
@@ -65,7 +127,8 @@ const ERRORS: Record<string, string> = {
   internal: 'The server hit an error. Try again.',
 }
 
-export function errorMessage({ error, fields, reason }: ApiErrorBody): string {
+export function errorMessage({ error, fields, reason, tracked, adding }: ApiErrorBody): string {
+  if (error === 'parts-cap') return `Adds ${adding} part${adding === 1 ? '' : 's'}, which would make ${tracked} / 20.`
   if (error === 'invalid-request') return `Invalid value: ${(fields ?? []).join(', ') || 'request'}.`
   if (error === 'token-rejected') {
     return `Token rejected: ${(reason && TOKEN_REASONS[reason]) ?? reason ?? 'unknown reason'}.`
