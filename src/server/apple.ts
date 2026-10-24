@@ -37,9 +37,16 @@ const isBuyLink = (link: string) => {
   if (!URL.canParse(link)) return false
   const url = new URL(link)
   return (
-    url.origin === ORIGIN && url.username === '' && url.password === '' && url.pathname.startsWith('/shop/buy-iphone/')
+    url.origin === ORIGIN &&
+    url.username === '' &&
+    url.password === '' &&
+    !/[?#]/.test(link) &&
+    url.pathname.startsWith('/shop/buy-iphone/')
   )
 }
+
+// The -unlocked suffix opens the page with Unlocked and No trade-in selected; a query such as ?igt=true clears No trade-in.
+const unlockedLink = (link: string) => (link.endsWith('-unlocked') ? link : `${link}-unlocked`)
 
 const CatalogEnvelope = z.object({
   body: z.object({
@@ -65,7 +72,7 @@ const CatalogEntry = z
       capacity: capacity.toLowerCase(),
       colorName,
       title: e.productTitle,
-      buyUrl: e.productLink,
+      buyUrl: unlockedLink(e.productLink),
     }
   })
 

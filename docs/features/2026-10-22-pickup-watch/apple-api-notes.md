@@ -34,6 +34,14 @@ Findings from requests made from a residential IP on 2026-10-22. Apple does not 
 - Duo names seen: "iPhone Duo 256GB Night Sky", "iPhone Duo 1TB Star White" (2 colors × 4 capacities in the list); its URLs follow `iphone-duo/7.6-inch-display-<capacity>-<color>-unlocked`.
 - Same model + storage, other color = same `familyType` and `dimensionCapacity`, different `dimensionColor`.
 
+## Buy link preselection (browser check 2026-10-23)
+
+- `…/iphone-18-pro/6.9-inch-display-256gb-black-unlocked` opens with the color, 256GB, "No trade-in", "Buy" and "Connect to any carrier later" (Unlocked) all selected.
+- Adding `?igt=true` clears the No trade-in selection, so the buy link carries no query.
+- The suffix-less link opened with only model and storage selected (owner).
+- The buy page's schema has no URL parameter for store or zip.
+- The catalog's `productLink` has no `-unlocked` suffix, so `parts.buy_url` is `productLink` plus `-unlocked`; a `productLink` with a query or fragment is dropped.
+
 ## Not tested
 
 - Whether a token works from a different IP or a datacenter IP (matters for the later Railway deploy).
