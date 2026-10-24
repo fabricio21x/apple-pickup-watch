@@ -1,7 +1,7 @@
 import type { StateDto } from '../shared/types'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatTime, healthText, stockBoard } from './logic'
+import { formatTime, healthText, isInStock, stockBoard } from './logic'
 
 export function StockBoard({ state }: { state: StateDto }) {
   const { health, lastSuccessAt } = state
@@ -34,7 +34,7 @@ export function StockBoard({ state }: { state: StateDto }) {
           <CardContent>
             <ul className="divide-y">
               {b.rows.map((r) => {
-                const inStock = r.badge !== 'Unavailable' && r.badge !== 'Not checked'
+                const inStock = isInStock(r.badge)
                 return (
                   <li key={`${r.part}/${r.store.store}`} className="flex items-center justify-between gap-3 py-2 text-sm">
                     <div className="min-w-0">

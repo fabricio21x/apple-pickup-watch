@@ -48,6 +48,8 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => setMessage(null), [view])
+
   useEffect(() => {
     void refresh()
     const id = setInterval(() => void refresh(), POLL_MS)

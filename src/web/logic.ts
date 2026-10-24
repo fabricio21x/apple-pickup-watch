@@ -35,29 +35,49 @@ export type StockRow = {
 
 export type StockBlock = { model: string; capacity: string; rows: StockRow[] }
 
-const stockRank = (badge: GridCell['badge']) => (badge === 'Unavailable' ? 1 : badge === 'Not checked' ? 2 : 0)
+export const isInStock = (badge: GridCell['badge']) => badge !== 'Unavailable' && badge !== 'Not checked'
+
+const stockRank = (badge: GridCell['badge']) => (isInStock(badge) ? 0 : badge === 'Unavailable' ? 1 : 2)
 
 export function stockBoard({ parts, stores, watches, partsCount }: StateDto): StockBlock[] {
   const storeById = new Map(stores.map((s) => [s.store, s]))
   const enabled = stores.filter((s) => s.enabled)
-  const cells = new Map(
-    watches.map((w) => [w.part, w.cells.map((c) => ({ badge: c.badge, store: storeById.get(c.store)! }))]),
-  )
+  const watchedParts = new Set(watches.map((w) => w.part))
+  const tracked = new Map<PartNumber, { role: TrackedPair['role']; cells: Map<string, GridCell['badge']> }>()
+  for (const w of watches) {
+    for (const c of w.cells) {
+      const role: TrackedPair['role'] = c.part === w.part ? 'watched' : 'other'
+      if (role === 'other' && watchedParts.has(c.part)) continue
+      let entry = tracked.get(c.part)
+      if (!entry) tracked.set(c.part, (entry = { role, cells: new Map() }))
+      entry.cells.set(c.store, c.badge)
+    }
+  }
   const unchecked = new Set(partsCount.unchecked)
   const blocks: StockBlock[] = []
   for (const p of parts) {
-    const watched = cells.get(p.part)
-    if (!watched && !unchecked.has(p.part)) continue
-    const role: TrackedPair['role'] = watched ? 'watched' : 'other'
-    const rows = (watched ?? enabled.map((store) => ({ badge: 'Not checked', store }))).map(
-      ({ badge, store }): StockRow => ({ part: p.part, colorName: p.colorName, role, store, badge, buyUrl: p.buyUrl }),
+    const entry =
+      tracked.get(p.part) ??
+      (unchecked.has(p.part)
+        ? { role: 'other' as const, cells: new Map(enabled.map((s) => [s.store, 'Not checked' as const])) }
+        : undefined)
+    if (!entry) continue
+    const rows = [...entry.cells].map(
+      ([store, badge]): StockRow => ({
+        part: p.part,
+        colorName: p.colorName,
+        role: entry.role,
+        store: storeById.get(store)!,
+        badge,
+        buyUrl: p.buyUrl,
+      }),
     )
     let block = blocks.find((b) => b.model === p.modelName && b.capacity === p.capacity)
     if (!block) blocks.push((block = { model: p.modelName, capacity: p.capacity, rows: [] }))
     block.rows.push(...rows)
   }
   for (const b of blocks) b.rows.sort((a, c) => stockRank(a.badge) - stockRank(c.badge))
-  const hasStock = (b: StockBlock) => b.rows.some((r) => stockRank(r.badge) === 0)
+  const hasStock = (b: StockBlock) => b.rows.some((r) => isInStock(r.badge))
   return [...blocks.filter(hasStock), ...blocks.filter((b) => !hasStock(b))]
 }
 

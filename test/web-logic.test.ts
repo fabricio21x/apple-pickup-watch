@@ -232,7 +232,78 @@ describe('stock board', () => {
     ])
   })
 
-  it('shows parts past the cap as other-color rows that are not checked, after the watched rows', () => {
+  describe('other colors', () => {
+    const blue = part('A5', 'iPhone 18 Pro', '256gb', 'Blue')
+    const green = part('A6', 'iPhone 18 Pro', '512gb', 'Green')
+    const withExtras = { parts: [...catalog, blue, green] }
+    const cell = (p: string, s: string, badge: string) => ({ part: p, store: s, badge })
+
+    it('shows the sibling colors found in a watch cells as other-color rows', () => {
+      const s = state({
+        watches: [
+          {
+            part: 'A1',
+            otherColors: true,
+            cells: [cell('A1', 'R1', 'Unavailable'), cell('A2', 'R1', 'Today'), cell('A2', 'R2', 'Unavailable')],
+          },
+        ],
+      })
+      expect(flat(s)[0]!.rows).toEqual([
+        ['Black', 'other', 'Near', 'Today'],
+        ['Silver', 'watched', 'Near', 'Unavailable'],
+        ['Black', 'other', 'Far', 'Unavailable'],
+      ])
+    })
+
+    it('shows a sibling of two watches once', () => {
+      const shared = [cell('A5', 'R1', 'Tomorrow'), cell('A5', 'R2', 'Unavailable')]
+      const s = state({
+        ...withExtras,
+        watches: [
+          { part: 'A1', otherColors: true, cells: [cell('A1', 'R1', 'Unavailable'), ...shared] },
+          { part: 'A2', otherColors: true, cells: [cell('A2', 'R1', 'Unavailable'), ...shared] },
+        ],
+      })
+      expect(flat(s)[0]!.rows.filter((r) => r[0] === 'Blue')).toEqual([
+        ['Blue', 'other', 'Near', 'Tomorrow'],
+        ['Blue', 'other', 'Far', 'Unavailable'],
+      ])
+    })
+
+    it('shows a sibling that is itself watched as watched, not as an other color', () => {
+      const s = state({
+        watches: [
+          { part: 'A1', otherColors: true, cells: [cell('A1', 'R1', 'Unavailable'), cell('A2', 'R1', 'Today')] },
+          { part: 'A2', otherColors: false, cells: [cell('A2', 'R1', 'Today')] },
+        ],
+      })
+      expect(flat(s)[0]!.rows).toEqual([
+        ['Black', 'watched', 'Near', 'Today'],
+        ['Silver', 'watched', 'Near', 'Unavailable'],
+      ])
+    })
+
+    it('shows a block that holds only other-color stock before blocks without stock', () => {
+      const s = state({
+        ...withExtras,
+        watches: [
+          { part: 'A1', otherColors: true, cells: [cell('A1', 'R1', 'Unavailable')] },
+          { part: 'A3', otherColors: true, cells: [cell('A3', 'R1', 'Unavailable'), cell('A6', 'R1', 'Today')] },
+        ],
+      })
+      expect(flat(s).map((b) => b.block)).toEqual(['iPhone 18 Pro 512gb', 'iPhone 18 Pro 256gb'])
+    })
+
+    it('does not repeat a part past the cap that a watch cells already carry', () => {
+      const s = state({
+        watches: [{ part: 'A2', otherColors: true, cells: [cell('A2', 'R1', 'Unavailable'), cell('A1', 'R1', 'Not checked')] }],
+        partsCount: { tracked: 2, cap: 20, unchecked: ['A1'] },
+      })
+      expect(flat(s)[0]!.rows.filter((r) => r[0] === 'Silver')).toEqual([['Silver', 'other', 'Near', 'Not checked']])
+    })
+  })
+
+  it('shows parts past the cap as not-checked other-color rows, after the watched rows', () => {
     const s = state({
       watches: [watch('A2', [['R1', 'Unavailable'], ['R2', 'Unavailable']])],
       partsCount: { tracked: 2, cap: 20, unchecked: ['A1'] },

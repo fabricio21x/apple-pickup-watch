@@ -207,9 +207,66 @@ describe('GET /api/state', () => {
     expect(badge('R250')).toBe('Today')
     expect(badge('R415')).toBe('Tomorrow')
     expect(badge('R032')).toBe('Unavailable')
-    expect(watch?.cells).toHaveLength(12)
+    expect(watch?.cells.filter((c) => c.part === SILVER)).toHaveLength(12)
     expect(state.lastCheckAt).toBe(NOW)
     expect(state.lastSuccessAt).toBe(NOW)
+  })
+
+  it('adds the other-color siblings of a watch with the switch on to its cells, at every enabled store', async () => {
+    const s = await withZipAndToken()
+    s.watch(SILVER)
+    s.setFulfillment('fulfillment-other-color-today.json')
+
+    await s.monitor.runCheck()
+    const state = await s.state()
+
+    const siblings = state.parts.filter(
+      (p) => p.part !== SILVER && p.modelName === 'iPhone 18 Pro' && p.capacity === '512gb',
+    )
+    const [watch] = state.watches
+    expect(siblings.length).toBeGreaterThan(0)
+    expect(watch?.cells.filter((c) => c.part === SILVER)).toHaveLength(12)
+    expect(watch?.cells.filter((c) => c.part !== SILVER).map((c) => c.part)).toEqual(
+      siblings.flatMap((p) => Array<string>(12).fill(p.part)),
+    )
+    const badge = (part: string, store: string) => watch?.cells.find((c) => c.part === part && c.store === store)?.badge
+    expect(badge(BURGUNDY, 'R250')).toBe('Today')
+    expect(badge(BURGUNDY, 'R032')).toBe('Unavailable')
+  })
+
+  it('keeps only the watched part in the cells of a watch with the switch off', async () => {
+    const s = await withZipAndToken()
+    s.watch(SILVER, false)
+
+    const state = await s.state()
+
+    expect(state.watches[0]?.cells.every((c) => c.part === SILVER)).toBe(true)
+  })
+
+  it('leaves a sibling that is itself watched out of the other-color cells', async () => {
+    const s = await withZipAndToken()
+    s.watch(SILVER)
+    s.watch(BURGUNDY, false)
+
+    const state = await s.state()
+
+    const silver = state.watches.find((w) => w.part === SILVER)
+    expect(silver?.cells.some((c) => c.part === BURGUNDY)).toBe(false)
+    expect(state.watches.find((w) => w.part === BURGUNDY)?.cells.every((c) => c.part === BURGUNDY)).toBe(true)
+  })
+
+  it('leaves the siblings past the cap of 20 out of the cells, as they are listed as unchecked', async () => {
+    const s = await setup()
+    await s.saveZip()
+    const parts = seedModel(s, 'Cap B', 22)
+    s.watch(parts[0] ?? '')
+
+    const state = await s.state()
+
+    expect(state.partsCount.unchecked).toEqual(parts.slice(20))
+    const cellParts = new Set(state.watches[0]?.cells.map((c) => c.part))
+    expect(parts.slice(0, 20).every((p) => cellParts.has(p))).toBe(true)
+    expect(parts.slice(20).some((p) => cellParts.has(p))).toBe(false)
   })
 
   it('shows Not checked for an enabled store Apple left out of the response', async () => {

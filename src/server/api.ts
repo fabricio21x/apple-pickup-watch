@@ -7,7 +7,7 @@ import { z } from 'zod'
 import type { GridCell, HealthDto, StateDto, TelegramError } from '../shared/types'
 import { parseCurl, parseTokenBody, type Apple } from './apple'
 import type { Db } from './db'
-import { PARTS_CAP, trackedParts, type Watch } from './domain'
+import { PARTS_CAP, siblingsOf, trackedParts, type Watch } from './domain'
 import type { Monitor } from './monitor'
 import { testMessage, type Telegram } from './telegram'
 
@@ -134,7 +134,19 @@ export function createApi(deps: ApiDeps) {
       if (!pickup) return 'Not checked'
       return pickup.kind === 'in' ? pickup.label : 'Unavailable'
     }
-    const tracked = trackedParts(db.listWatches(), db.listParts())
+    const watches = db.listWatches()
+    const catalog = db.listParts()
+    const tracked = trackedParts(watches, catalog)
+    const watchedParts = new Set(watches.map((w) => w.part))
+    const unchecked = tracked.slice(PARTS_CAP)
+    const cellParts = (w: Watch) => [
+      w.part,
+      ...(w.otherColors
+        ? siblingsOf(catalog, w.part)
+            .map((c) => c.part)
+            .filter((part) => !watchedParts.has(part) && !unchecked.includes(part))
+        : []),
+    ]
     const lanUrls = settings.lanEnabled ? lanHosts().map((h) => `http://${h}:${deps.port}`) : []
 
     const state: StateDto = {
@@ -147,11 +159,11 @@ export function createApi(deps: ApiDeps) {
         distanceMi: s.distanceMi,
         enabled: s.enabled,
       })),
-      parts: db.listParts(),
-      watches: db.listWatches().map((w) => ({
+      parts: catalog,
+      watches: watches.map((w) => ({
         part: w.part,
         otherColors: w.otherColors,
-        cells: enabled.map((s) => ({ part: w.part, store: s.store, badge: badge(w.part, s.store) })),
+        cells: cellParts(w).flatMap((part) => enabled.map((s) => ({ part, store: s.store, badge: badge(part, s.store) }))),
       })),
       lastCheckAt: snapshot.lastCheckAt,
       lastSuccessAt: snapshot.lastSuccessAt,
@@ -163,7 +175,7 @@ export function createApi(deps: ApiDeps) {
         lastError: snapshot.telegramLastError && telegramErrorDto(snapshot.telegramLastError),
       },
       health: healthDto(snapshot.health),
-      partsCount: { tracked: tracked.length, cap: PARTS_CAP, unchecked: tracked.slice(PARTS_CAP) },
+      partsCount: { tracked: tracked.length, cap: PARTS_CAP, unchecked },
     }
     return c.json(state)
   })
