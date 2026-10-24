@@ -17,7 +17,7 @@
 - Source: user, same walkthrough
 - Words: the links in the messages only load the page with the model and storage selected, no color, conectivity or trade-in, which slows down the process of buying quickly.
 - Level: scope
-- Status: planned
+- Status: done
 - Outcome: spec.md Scope (buy links), out of scope, acceptance criterion 61 and decision log; design.md decision 10, Constraints, Rollout step 0. `-unlocked` confirmed by the owner; `igt=true` checked in T14; no store or zip key in Apple's URL. Spec and design approved by the owner ("yes", 2026-10-23). Task T14.
 
 ## C3: cURL dialog hides Save on a long paste

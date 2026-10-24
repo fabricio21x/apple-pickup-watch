@@ -118,10 +118,9 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:61 (buy button preselects what Apple's URL supports); design.md decision 10, Rollout amendment step 0. Change C2 in changes.md.
 - Files: `src/server/apple.ts` (catalog `buyUrl` = `productLink` + `-unlocked`, `productLink` with no query or fragment), `test/apple.test.ts`, `docs/features/2026-10-22-pickup-watch/apple-api-notes.md`
 - Depends on: none
-- Status: todo
-- Review:
-- Notes: First ask the owner to open one `…-unlocked?igt=true` link in Brave and say whether No trade-in is selected; add `?igt=true` only if it is, and record the answer in apple-api-notes.md. The `-unlocked` link selecting color and Unlocked is confirmed (owner, 2026-10-23).
-
+- Status: done
+- Review: approve-with-comments, 0 fix rounds
+- Notes: Browser check 2026-10-23 in the spike's Brave: the `-unlocked` link opens with color, storage, No trade-in, Buy and Unlocked selected; `?igt=true` clears No trade-in, so the link has no query. Non-blocking: a `productLink` ending in `/` would get `/-unlocked` (src/server/apple.ts:49; Apple's links have none); the no-double test passed before the change too (test/apple.test.ts:140); apple-api-notes.md:43 doesn't say the suffix is never doubled. Deviations: `test/monitor.test.ts` buy-URL constants updated to `-unlocked` (reviewer: justified); the query/fragment check is on the raw string, so a bare `?` or `#` is caught too; built in a worktree and merged as e1a582c.
 ### T15: Cap tracked parts at 20
 - Serves: spec.md:54 (one request), 55 (cap, refusal with count); design.md decision 24, decision 5 (re-posting a watched part is a no-op). Change C5.
 - Files: `src/server/domain.ts` (`trackedParts`, watched first), `src/server/monitor.ts` (part list cut at 20), `src/server/api.ts` (409 `parts-cap` on watch create and other-colors on, ignoring already-watched parts), `src/shared/types.ts` (`StateDto.partsCount`), `test/domain.test.ts`, `test/monitor.test.ts`, `test/api.test.ts`
