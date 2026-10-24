@@ -173,12 +173,12 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Serves: spec.md:72 (reachable from the phone after enabling the Wi-Fi opt-in); design.md decision 16 (the toggle applies on restart and the page says so). Change C8 (walkthrough to-do 5a).
 - Files: `src/web/Settings.tsx` (while `lan.restartRequired`, a prominent notice and the network addresses shown as "available after restart", not as links), `src/web/logic.ts` and `test/web-logic.test.ts` only if a pure helper is worth testing
 - Depends on: none
-- Status: todo
-- Review:
-- Notes: The owner turned Wi-Fi access on and the other devices couldn't load the page, because the server hadn't been restarted.
+- Status: done
+- Review: approve-with-comments, 0 fix rounds; one non-blocking finding fixed in a follow-up commit (4e3435b)
+- Notes: The owner turned Wi-Fi access on and the other devices couldn't load the page, because the server hadn't been restarted. Browser check by the implementer with a mocked `/api/state` at 375 px: pending-on shows a red alert, the restart how-to and the addresses as plain text; pending-off the alert without addresses; live the links; no horizontal scroll. Fixed after review: the how-to paragraph used `break-all` and split ordinary words; now `break-words`, with `break-all` only on the launchctl command (computed word-break normal, scrollWidth 375). Non-blocking: only the pure `lanStatus` helper is unit-tested; the link/no-link rendering rests on the browser check (no component tests in the project). Deviations: built in a worktree and merged as bfc9070; the old muted hint is replaced by the alert.
 
 ## Final review
-- Status: done
+- Status: todo (reopened 2026-10-24 for T20 and T21; the earlier review below covered 7a85437..1a63282)
 - Review: approve-with-comments, 0 fix rounds (range 7a85437..1a63282; 411 tests pass, type check clean)
 - Notes: Criteria met by code and tests: spec.md:52-66, 69, 73. Partly verified or unverified, manual by design: 61 (live buy-link tap; the Brave check is in T14), 67 (no 3 h unattended run of token:auto itself), 68 (real Telegram delivery), 70-71 (real layouts at 375 px and wide; Playwright checks in T18), 72 (phone over Wi-Fi), 74 (`npm start` on a clean clone). Non-blocking: README.md:55 and :83 still say "settings strip" instead of the Settings view and the toggle's label; the fatal handler logs only `err.name`, so under launchd a port clash or bad env restarts silently (src/server/index.ts:15, open since T11); a color whose only stores are "not checked" still gets a Buy button (src/server/telegram.ts:48); a later accepted health, warning or start message clears a stock-message refusal from `lastError` (src/server/monitor.ts:162); `EXTENSION_ID` remains in .env.example, boot.ts and the Origin guard though no extension was built (.env.example:4); the 4096-character test has no Gone line (test/telegram.test.ts:196). Cleanup: unslop removed unused UI-kit exports (3b9531f); no-comments removed one narrating comment and shortened the token-auto header, restoring the cookie-clearing why at its line (1a63282).
 
