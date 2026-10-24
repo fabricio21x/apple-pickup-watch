@@ -153,6 +153,14 @@ Order follows design.md Rollout: the token spike script lands right after the sc
 - Review:
 - Notes: The cap's 409 body carries `tracked` as the count after the change; word the refusal as "Adds <adding> parts, which would make <tracked> / 20". Delete `Location.tsx` and `SettingsStrip.tsx` after the move. Worth folding in from T13's notes: `resize-none` and 16 px text on the cURL textarea, a max height on the dialog. Check by hand at 375 px and 1280 px, plus refresh and back.
 
+### T19: Other-color rows on the stock board
+- Serves: spec.md:69 (Today / Tomorrow / unavailable for each tracked pair); design.md decision 18 ("Other color" rows), Data shapes (`WatchDto.cells`, `GridCell.part`). Change C6.
+- Files: `src/server/api.ts` (state builder: a watch's `cells` cover all its tracked pairs, its other-color siblings included when its switch is on), `src/web/logic.ts` (`stockBoard` takes other-color cells from `watches[].cells`, de-duplicated by part and store, marked "Other color"), `test/api.test.ts`, `test/web-logic.test.ts`
+- Depends on: T17, T18
+- Status: todo
+- Review:
+- Notes: Found by T18: until this lands, the board shows other colors only when they are past the cap.
+
 ## Final review
 - Status: todo
 - Review:
