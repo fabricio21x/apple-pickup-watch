@@ -67,3 +67,11 @@
 - Level: build (design decision 16: the Wi-Fi toggle saves the setting and the page says "restart to apply"; spec.md:72 holds once restarted, verified 2026-10-24: 200 from 192.168.18.75 and fabricios-macbook.local after the restart). The hint at src/web/Settings.tsx:189-191 is small muted text, and :192-197 lists the LAN URLs as live links before the restart.
 - Status: done
 - Outcome: build level, no document change; task T21 in plan.md. The owner chose to build it now.
+
+## C9: Redesign the stock board
+- Date: 2026-10-25
+- Source: user
+- Words: Redesign the stock board (the main dashboard view) properly: run the UI direction for it with impeccable, shape with me and then mockups. Stop after I approve the design; don't build it yet.
+- Level: design (spec.md:35 and :69 still hold; design.md decision 18's stock board layout changes)
+- Status: open
+- Outcome: pending
