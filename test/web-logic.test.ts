@@ -138,6 +138,11 @@ describe('health text', () => {
       'Monitoring is down: the Apple token expired',
     )
   })
+  it('names Apple limiting the network when a fresh token was refused too', () => {
+    expect(healthText({ status: 'down', failures: 3, cause: 'network-limited' })).toBe(
+      'Monitoring is down: Apple is limiting your network: a fresh token was refused too',
+    )
+  })
   it('counts the failures while still failing', () => {
     expect(healthText({ status: 'failing', failures: 2, cause: 'network' })).toBe(
       'Last check failed: Apple could not be reached (2 in a row)',
@@ -453,6 +458,13 @@ describe('down banner', () => {
     expect(
       downBanner(state({ health: { status: 'down', failures: 3, cause: 'token-rejected' }, token: { status: 'rejected', expiresAt: null } })),
     ).toEqual({ title: 'Monitoring is down', reason: 'Apple rejected the token, so stock is not being checked.', tokenFix: true })
+  })
+  it('has no token fix when Apple is limiting the network', () => {
+    expect(downBanner(state({ health: { status: 'down', failures: 3, cause: 'network-limited' } }))).toEqual({
+      title: 'Monitoring is down',
+      reason: 'Apple is limiting your network: a fresh token was refused too, so stock is not being checked.',
+      tokenFix: false,
+    })
   })
   it('has no token fix when Apple could not be reached', () => {
     expect(downBanner(state({ health: { status: 'down', failures: 3, cause: 'network' } }))).toEqual({

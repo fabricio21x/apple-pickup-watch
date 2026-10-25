@@ -10,6 +10,7 @@ import { chromium, type Browser, type BrowserContext } from 'playwright'
 import { z } from 'zod'
 import { shldExpiresAt } from '../src/server/apple'
 import { readEnv as readServerEnv } from '../src/server/boot'
+import type { TokenStatus } from '../src/shared/types'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const BUY_PAGE = 'https://www.apple.com/shop/buy-iphone/iphone-18-pro'
@@ -19,6 +20,7 @@ const MIN = 60_000
 const REFRESH_MARGIN_MS = 20 * MIN
 const MAX_SLEEP_MS = 10 * MIN
 const RETRY_MS = MIN
+const FORCED_RENEW_GAP_MS = 10 * MIN
 const PAGE_SETTLE_MS = 5000
 
 export type CookiePair = { dssid2: string | undefined; shld: string | undefined }
@@ -35,11 +37,16 @@ export function nextCheckDelayMs(expiresAt: number, now: number): number {
   return Math.min(Math.max(expiresAt - REFRESH_MARGIN_MS - now, RETRY_MS), MAX_SLEEP_MS)
 }
 
+export function shouldRenewOnRejection(status: TokenStatus | undefined, lastForcedAt: number | null, now: number): boolean {
+  return status === 'rejected' && (lastForcedAt === null || now - lastForcedAt >= FORCED_RENEW_GAP_MS)
+}
+
 const Env = z.object({
   BRAVE_CDP_PORT: z.coerce.number().int().min(1).max(65535).default(9222),
   BRAVE_PROFILE_DIR: z.string().min(1).default(`${root}data/brave-profile`),
 })
 const PostReply = z.object({ stored: z.boolean() })
+const StateReply = z.object({ token: z.object({ status: z.enum(['missing', 'untested', 'working', 'rejected', 'expired']) }) })
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const log = (message: string) => console.log(`${new Date().toISOString()} ${message}`)
@@ -90,14 +97,29 @@ async function readPair(context: BrowserContext): Promise<CookiePair> {
   return { dssid2: cookies.find((c) => c.name === 'dssid2')?.value, shld: cookies.find((c) => c.name === 'shld_bt_ck')?.value }
 }
 
-async function currentPair(context: BrowserContext): Promise<Pair & { userAgent: string }> {
+async function readTokenStatus(): Promise<TokenStatus | undefined> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${config.serverPort}/api/state`, { signal: AbortSignal.timeout(5000) })
+    const state = StateReply.safeParse(await res.json())
+    return state.success ? state.data.token.status : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function currentPair(context: BrowserContext, forced: boolean): Promise<Pair & { userAgent: string }> {
   const page = await context.newPage()
   try {
     let pair = await readPair(context)
-    if (needsRefresh(pair, Date.now())) {
-      log('pair missing or near expiry: clearing shld_bt_ck and reloading the buy page')
+    if (forced || needsRefresh(pair, Date.now())) {
+      log(
+        forced
+          ? 'the server rejected the pair: clearing dssid2 and shld_bt_ck and reloading the buy page'
+          : 'pair missing or near expiry: clearing shld_bt_ck and reloading the buy page',
+      )
       // Apple issues a fresh pair on a page load only once shld_bt_ck is gone, never before it expires (spike/RESULT.md).
       await context.clearCookies({ name: 'shld_bt_ck' })
+      if (forced) await context.clearCookies({ name: 'dssid2' })
       await page.goto(BUY_PAGE, { waitUntil: 'load' })
       await page.waitForTimeout(PAGE_SETTLE_MS)
       pair = await readPair(context)
@@ -124,24 +146,31 @@ async function post(pair: Pair & { userAgent: string }): Promise<void> {
 async function main(): Promise<void> {
   log(`token:auto start: server port ${config.serverPort}, CDP port ${config.cdpPort}, profile ${config.profile}`)
   let browser: Browser | undefined
+  let nextCheckAt = 0
+  let lastForcedAt: number | null = null
   for (;;) {
-    let delay = RETRY_MS
-    try {
-      browser ??= await connect()
-      const context = browser.contexts()[0] ?? (await browser.newContext())
-      const pair = await currentPair(context)
-      const expiresAt = shldExpiresAt(pair.shld)
-      if (expiresAt === undefined) throw new Error('shld_bt_ck has no readable expiry')
-      log(`pair expires ${at(expiresAt)}`)
-      await post(pair)
-      delay = nextCheckDelayMs(expiresAt, Date.now())
-    } catch (error) {
-      log(`error, retrying in ${RETRY_MS / 1000}s: ${error instanceof Error ? error.message.split('\n')[0]?.slice(0, 200) : 'non-error'}`)
-      await browser?.close().catch(() => undefined)
-      browser = undefined
+    const forced = Date.now() < nextCheckAt && shouldRenewOnRejection(await readTokenStatus(), lastForcedAt, Date.now())
+    if (forced || Date.now() >= nextCheckAt) {
+      if (forced) lastForcedAt = Date.now()
+      let delay = RETRY_MS
+      try {
+        browser ??= await connect()
+        const context = browser.contexts()[0] ?? (await browser.newContext())
+        const pair = await currentPair(context, forced)
+        const expiresAt = shldExpiresAt(pair.shld)
+        if (expiresAt === undefined) throw new Error('shld_bt_ck has no readable expiry')
+        log(`pair expires ${at(expiresAt)}`)
+        await post(pair)
+        delay = nextCheckDelayMs(expiresAt, Date.now())
+      } catch (error) {
+        log(`error, retrying in ${RETRY_MS / 1000}s: ${error instanceof Error ? error.message.split('\n')[0]?.slice(0, 200) : 'non-error'}`)
+        await browser?.close().catch(() => undefined)
+        browser = undefined
+      }
+      nextCheckAt = Date.now() + delay
+      log(`next check ${at(nextCheckAt)}`)
     }
-    log(`next check ${at(Date.now() + delay)}`)
-    await sleep(delay)
+    await sleep(MIN)
   }
 }
 

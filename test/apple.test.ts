@@ -361,15 +361,43 @@ describe('fulfillment check', () => {
     expect(await a.check(request)).toEqual({ ok: false, cause: 'network' })
   })
 
-  it.each([541, 401, 403])('classifies HTTP %i with an expired stored token as token-expired', async (status) => {
+  it.each([541, 401, 403, 429])('classifies HTTP %i with an expired stored token as token-expired', async (status) => {
     const { apple: a } = apple(reply(status, fixture('rejected-541.html')))
     const expired = { ...token, expiresAt: NOW - 1 }
     expect(await a.check({ ...request, token: expired })).toEqual({ ok: false, cause: 'token-expired' })
   })
 
-  it.each([541, 401, 403])('classifies HTTP %i with an unexpired stored token as token-rejected', async (status) => {
+  it.each([541, 401, 403, 429])('classifies HTTP %i with an unexpired stored token as token-rejected', async (status) => {
     const { apple: a } = apple(reply(status, fixture('rejected-541.html')))
     expect(await a.check(request)).toEqual({ ok: false, cause: 'token-rejected' })
+  })
+
+  it('classifies a refusal of the same token as the first refusal of the run as token-rejected', async () => {
+    const { apple: a } = apple(reply(541, fixture('rejected-541.html')))
+    expect(await a.check({ ...request, firstRefusalExpiresAt: token.expiresAt })).toEqual({
+      ok: false,
+      cause: 'token-rejected',
+    })
+  })
+
+  it.each([541, 401, 403, 429])(
+    'classifies HTTP %i with a token newer than the one at the first refusal as network-limited',
+    async (status) => {
+      const { apple: a } = apple(reply(status, fixture('rejected-541.html')))
+      expect(await a.check({ ...request, firstRefusalExpiresAt: token.expiresAt - 1 })).toEqual({
+        ok: false,
+        cause: 'network-limited',
+      })
+    },
+  )
+
+  it('classifies a refusal with an expired token as token-expired even when the run saw an older token', async () => {
+    const { apple: a } = apple(reply(541, fixture('rejected-541.html')))
+    const expired = { ...token, expiresAt: NOW - 1 }
+    expect(await a.check({ ...request, token: expired, firstRefusalExpiresAt: NOW - 2 })).toEqual({
+      ok: false,
+      cause: 'token-expired',
+    })
   })
 
   it('classifies the 503 maintenance page as unexpected, not a token problem', async () => {
@@ -380,7 +408,7 @@ describe('fulfillment check', () => {
     })
   })
 
-  it.each([500, 502, 404, 429])('classifies HTTP %i as unexpected', async (status) => {
+  it.each([500, 502, 404])('classifies HTTP %i as unexpected', async (status) => {
     const { apple: a } = apple(reply(status, '{"head":{"status":"x"}}'))
     expect(await a.check(request)).toEqual({ ok: false, cause: 'unexpected' })
   })

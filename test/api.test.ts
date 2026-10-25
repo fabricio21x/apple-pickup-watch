@@ -92,9 +92,16 @@ async function setup(options: { lanEnabled?: boolean; telegram?: Telegram | null
   await monitor.loadCatalog()
 
   let interfaces: Interfaces = { en0: iface('192.168.1.20') }
+  const tokenStoredCalls: number[] = []
   const api = createApi({
     db,
-    monitor,
+    monitor: {
+      ...monitor,
+      tokenStored() {
+        tokenStoredCalls.push(now())
+        monitor.tokenStored()
+      },
+    },
     apple,
     telegram,
     lanEnabled: options.lanEnabled ?? false,
@@ -142,6 +149,7 @@ async function setup(options: { lanEnabled?: boolean; telegram?: Telegram | null
     state,
     saveZip,
     sent,
+    tokenStoredCalls,
     storeLookups,
     advance: (ms: number) => {
       t += ms
@@ -802,6 +810,26 @@ describe('POST /api/token', () => {
     expect(res.json.stored).toBe(true)
     expect(s.storedToken()?.expiresAt).toBe(NOW + HOUR + 60_000)
     expect(s.db.getSettings().tokenWarned).toBe(false)
+  })
+
+  it('tells the monitor when a newer pair was stored, so a refusal backoff ends', async () => {
+    const s = await setup()
+    s.withToken()
+
+    await s.call('/api/token', { method: 'POST', body: pair(NOW + HOUR + 60_000, 'n') })
+    await s.call('/api/token', { method: 'POST', body: { curl: curlFor(NOW + HOUR - 60_000) } })
+
+    expect(s.tokenStoredCalls).toHaveLength(2)
+  })
+
+  it('does not tell the monitor when nothing was stored', async () => {
+    const s = await setup()
+    s.withToken()
+
+    await s.call('/api/token', { method: 'POST', body: pair(NOW + HOUR, 'other') })
+    await s.call('/api/token', { method: 'POST', body: pair(NOW + HOUR - 60_000, 'old') })
+
+    expect(s.tokenStoredCalls).toHaveLength(0)
   })
 
   it('answers 200 and stores nothing for an extension pair with an equal timestamp, keeping the expiry warning', async () => {

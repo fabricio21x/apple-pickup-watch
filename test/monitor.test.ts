@@ -970,6 +970,76 @@ describe('health', () => {
   })
 })
 
+describe('network-limited cause', () => {
+  const NEWER = { ...TOKEN, shldBtCk: 'id|2|payload|sig', expiresAt: NOW + 2 * HOUR }
+  const downs = (s: { texts: () => string[] }) => s.texts().filter((t) => /monitoring is down/i.test(t))
+
+  async function refused() {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setFulfillmentStatus(541)
+    return s
+  }
+
+  it('stays token-rejected when the same token is refused again', async () => {
+    const s = await refused()
+
+    await s.monitor.runCheck()
+
+    expect(await s.monitor.runCheck()).toEqual({ ok: false, cause: 'token-rejected' })
+  })
+
+  it('is network-limited when a token newer than the one at the first refusal is refused too', async () => {
+    const s = await refused()
+    await s.monitor.runCheck()
+    s.db.setToken(NEWER)
+    s.monitor.tokenStored()
+
+    expect(await s.monitor.runCheck()).toEqual({ ok: false, cause: 'network-limited' })
+    expect(s.monitor.snapshot().token.status).toBe('rejected')
+  })
+
+  it('goes back to token-rejected for the first refusal of a run that starts after a success', async () => {
+    const s = await refused()
+    await s.monitor.runCheck()
+    s.db.setToken(NEWER)
+    s.setFulfillmentStatus(200)
+    await s.monitor.runCheck()
+    s.setFulfillmentStatus(541)
+
+    expect(await s.monitor.runCheck()).toEqual({ ok: false, cause: 'token-rejected' })
+  })
+
+  it('names Apple limiting the network in the one down message and says the checks are slowed', async () => {
+    const s = await refused()
+    await s.monitor.runCheck()
+    s.db.setToken(NEWER)
+    await s.monitor.runCheck()
+    await s.monitor.runCheck()
+
+    expect(downs(s)).toHaveLength(1)
+    expect(downs(s)[0]).toContain('Apple is limiting your network: a fresh token was refused too')
+    expect(downs(s)[0]).toContain('Checks slowed to every 10 min until Apple accepts them again.')
+    expect(s.monitor.snapshot().health.cause).toBe('network-limited')
+  })
+
+  it('says the checks are slowed in the down message of a rejected token', async () => {
+    const s = await refused()
+    for (let i = 0; i < 3; i++) await s.monitor.runCheck()
+
+    expect(downs(s)[0]).toContain('Checks slowed to every 10 min until Apple accepts them again.')
+  })
+
+  it('does not say the checks are slowed in the down message of a network failure', async () => {
+    const s = await setup()
+    s.watch(SILVER)
+    s.setNetworkDown(true)
+    for (let i = 0; i < 3; i++) await s.monitor.runCheck()
+
+    expect(downs(s)[0]).not.toMatch(/slowed/i)
+  })
+})
+
 describe('token expiry warning', () => {
   const MIN = 60_000
   const warnings = (s: { texts: () => string[] }) => s.texts().filter((t) => /expires/i.test(t))
@@ -1282,6 +1352,8 @@ describe('scheduler', () => {
   })
 
   async function schedulerSetup(options: { random?: () => number; appleMs?: number; telegramMs?: number } = {}) {
+    let status = 200
+    let networkDown = false
     const startTimes: number[] = []
     const fulfillmentUrls: string[] = []
     let running = 0
@@ -1298,6 +1370,8 @@ describe('scheduler', () => {
       maxRunning = Math.max(maxRunning, running)
       if (options.appleMs) await new Promise((resolve) => setTimeout(resolve, options.appleMs))
       running -= 1
+      if (networkDown) throw new TypeError('fetch failed')
+      if (status !== 200) return new Response(fixture('rejected-541.html'), { status })
       return new Response(fulfillmentBody(stock))
     }) as typeof fetch
     let stock: Record<string, Stock> = {}
@@ -1332,8 +1406,119 @@ describe('scheduler', () => {
         stock = next
       },
       advance: (ms: number) => vi.advanceTimersByTimeAsync(ms),
+      setStatus: (next: number) => {
+        status = next
+      },
+      setNetworkDown: (down: boolean) => {
+        networkDown = down
+      },
     }
   }
+
+  const MIN = 60 * SEC
+  const startMinutes = (s: { startTimes: number[] }) => s.startTimes.map((t) => (t - NOW) / MIN)
+
+  describe('refusal backoff', () => {
+    it.each([541, 401, 403, 429])('spaces the checks 2, 5, 10 and 10 minutes apart after Apple answers HTTP %i', async (status) => {
+      const s = await schedulerSetup()
+      s.setStatus(status)
+
+      s.monitor.start()
+      await s.advance(40 * MIN)
+      s.monitor.stop()
+
+      expect(startMinutes(s)).toEqual([0, 2, 7, 17, 27, 37])
+    })
+
+    it('returns to the set interval after a check succeeds', async () => {
+      const s = await schedulerSetup()
+      s.setStatus(541)
+
+      s.monitor.start()
+      await s.advance(8 * MIN)
+      s.setStatus(200)
+      await s.advance(10 * MIN)
+      s.monitor.stop()
+
+      expect(startMinutes(s).slice(0, 5)).toEqual([0, 2, 7, 17, 18])
+    })
+
+    it('starts the backoff over from 2 minutes when a later run of refusals begins after a success', async () => {
+      const s = await schedulerSetup()
+      s.setStatus(541)
+
+      s.monitor.start()
+      await s.advance(8 * MIN)
+      s.setStatus(200)
+      await s.advance(10 * MIN)
+      s.setStatus(541)
+      await s.advance(5 * MIN)
+      s.monitor.stop()
+
+      expect(startMinutes(s).slice(3)).toEqual([17, 18, 19, 21])
+    })
+
+    it('resets the backoff and reschedules one interval from now when a newer token is stored', async () => {
+      const s = await schedulerSetup()
+      s.setStatus(541)
+
+      s.monitor.start()
+      await s.advance(30 * SEC)
+      s.db.setToken({ ...TOKEN, shldBtCk: 'id|2|payload|sig', expiresAt: NOW + 2000 * HOUR })
+      s.monitor.tokenStored()
+      await s.advance(10 * MIN)
+      s.monitor.stop()
+
+      expect(s.startTimes.map((t) => (t - NOW) / SEC).slice(0, 3)).toEqual([0, 90, 210])
+    })
+
+    it('keeps the set interval after a network failure', async () => {
+      const s = await schedulerSetup()
+      s.setNetworkDown(true)
+
+      s.monitor.start()
+      await s.advance(3 * MIN)
+      s.monitor.stop()
+
+      expect(startMinutes(s)).toEqual([0, 1, 2, 3])
+    })
+
+    it('keeps the set interval after an unexpected response', async () => {
+      const s = await schedulerSetup()
+      s.setStatus(503)
+
+      s.monitor.start()
+      await s.advance(3 * MIN)
+      s.monitor.stop()
+
+      expect(startMinutes(s)).toEqual([0, 1, 2, 3])
+    })
+
+    it('keeps the backoff when the interval is changed during it', async () => {
+      const s = await schedulerSetup()
+      s.setStatus(541)
+
+      s.monitor.start()
+      await s.advance(30 * SEC)
+      s.monitor.setInterval(30)
+      await s.advance(8 * MIN)
+      s.monitor.stop()
+
+      expect(startMinutes(s)).toEqual([0, 2, 7])
+    })
+
+    it('does not move the next check when a newer token is stored while checks are healthy', async () => {
+      const s = await schedulerSetup()
+
+      s.monitor.start()
+      await s.advance(30 * SEC)
+      s.monitor.tokenStored()
+      await s.advance(2 * MIN)
+      s.monitor.stop()
+
+      expect(startMinutes(s)).toEqual([0, 1, 2])
+    })
+  })
 
   it('a check sends one fulfillment request covering the watched part and its other color', async () => {
     const s = await schedulerSetup()

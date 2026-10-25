@@ -179,6 +179,7 @@ const DOWN_REASONS: Record<NonNullable<HealthDto['cause']>, { reason: string; to
   network: { reason: 'Apple could not be reached', tokenFix: false },
   'token-expired': { reason: 'The Apple token expired', tokenFix: true },
   'token-rejected': { reason: 'Apple rejected the token', tokenFix: true },
+  'network-limited': { reason: 'Apple is limiting your network: a fresh token was refused too', tokenFix: false },
   unexpected: { reason: 'Apple returned an unexpected answer', tokenFix: false },
 }
 
@@ -292,6 +293,7 @@ const CAUSES: Record<NonNullable<HealthDto['cause']>, string> = {
   network: 'Apple could not be reached',
   'token-expired': 'the Apple token expired',
   'token-rejected': 'Apple rejected the token',
+  'network-limited': 'Apple is limiting your network: a fresh token was refused too',
   unexpected: 'Apple returned an unexpected answer',
 }
 

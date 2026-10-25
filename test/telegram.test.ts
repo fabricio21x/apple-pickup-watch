@@ -243,6 +243,23 @@ describe('other messages', () => {
     expect(text).toContain('Paste a fresh cURL')
   })
 
+  it('names Apple limiting the network, without a token fix, when a fresh token was refused too', () => {
+    const { text } = healthMessage({ kind: 'down', cause: 'network-limited' })
+
+    expect(text).toContain('Apple is limiting your network: a fresh token was refused too')
+    expect(text).not.toContain('Paste a fresh cURL')
+  })
+
+  it('adds that checks are slowed, and to how many minutes, when the backoff is active', () => {
+    const { text } = healthMessage({ kind: 'down', cause: 'token-rejected', slowedMin: 5 })
+
+    expect(text).toContain('Checks slowed to every 5 min until Apple accepts them again.')
+  })
+
+  it('does not mention slowed checks when the backoff is not active', () => {
+    expect(healthMessage({ kind: 'down', cause: 'network' }).text).not.toContain('slowed')
+  })
+
   it('styles the back up message with ✅ and a bold heading', () => {
     expect(healthMessage({ kind: 'up' }).text).toMatch(/^✅ <b>Back up<\/b>\n.+/)
   })

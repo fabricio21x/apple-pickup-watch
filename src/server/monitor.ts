@@ -35,10 +35,13 @@ const DEADLINE_MARGIN_MS = 5000
 const MIN_INTERVAL_SEC = 30
 const MAX_INTERVAL_SEC = 3600
 const EXPIRY_WARNING_MS = 15 * 60_000
+const REFUSAL_BACKOFF_MS = [2 * 60_000, 5 * 60_000, 10 * 60_000]
+const REFUSALS = new Set<FailureCause>(['token-rejected', 'token-expired', 'network-limited'])
 
 type TokenOutcome = Extract<TokenStatus, 'working' | 'rejected' | 'expired'>
 const TOKEN_FAILURE: Partial<Record<FailureCause, TokenOutcome>> = {
   'token-rejected': 'rejected',
+  'network-limited': 'rejected',
   'token-expired': 'expired',
 }
 const tokenKey = (token: AppleToken) => `${token.dssid2}|${token.shldBtCk}`
@@ -66,6 +69,7 @@ export type Monitor = {
   start(): void
   stop(): void
   setInterval(sec: number): void
+  tokenStored(): void
 }
 
 export function createMonitor(deps: {
@@ -90,6 +94,9 @@ export function createMonitor(deps: {
   let running = false
   let inFlight = false
   let cycleStartedAt = 0
+  let refusals = 0
+  let backoffMs: number | null = null
+  let firstRefusalExpiresAt: number | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let tokenOutcome: { key: string; status: TokenOutcome } | null = null
 
@@ -167,7 +174,9 @@ export function createMonitor(deps: {
     const { state: next, send } = nextHealth(db.getHealth(), result, { now: now(), expiresAt })
     const health = { ...next, cause: result.ok ? null : result.cause }
     db.setHealth(health)
-    if (send && (await notify(healthMessage(send)))) db.setHealth({ ...health, downAnnounced: send.kind === 'down' })
+    if (!send) return
+    const message = send.kind === 'down' && backoffMs !== null ? { ...send, slowedMin: backoffMs / 60_000 } : send
+    if (await notify(healthMessage(message))) db.setHealth({ ...health, downAnnounced: send.kind === 'down' })
   }
 
   async function warnIfExpiring() {
@@ -203,11 +212,20 @@ export function createMonitor(deps: {
       watchedParts: checked.filter((p) => watchedSet.has(p)),
       otherParts: checked.filter((p) => !watchedSet.has(p)),
       enabledStores: [...new Set(tracked.map((t) => t.store))],
+      firstRefusalExpiresAt,
     })
 
     state.lastCheckAt = now()
     const tokenStatus = outcome.ok ? 'working' : TOKEN_FAILURE[outcome.cause]
     if (tokenStatus) tokenOutcome = { key: tokenKey(token), status: tokenStatus }
+    if (outcome.ok) {
+      refusals = 0
+      firstRefusalExpiresAt = undefined
+    } else if (REFUSALS.has(outcome.cause)) {
+      firstRefusalExpiresAt ??= token.expiresAt
+      backoffMs = REFUSAL_BACKOFF_MS[Math.min(refusals, REFUSAL_BACKOFF_MS.length - 1)] ?? null
+      refusals += 1
+    }
     if (!outcome.ok) {
       await recordHealth(outcome, token.expiresAt)
       return outcome
@@ -238,10 +256,12 @@ export function createMonitor(deps: {
     try {
       inFlight = true
       cycleStartedAt = now()
+      backoffMs = null
       state.nextStartAt = cycleStartedAt + jitterMs(db.getSettings().intervalSec, random)
       await runCheck({ deadline: state.nextStartAt })
     } finally {
       inFlight = false
+      if (backoffMs !== null) state.nextStartAt = cycleStartedAt + backoffMs
       if (running) arm()
       else state.nextStartAt = null
     }
@@ -273,12 +293,22 @@ export function createMonitor(deps: {
       if (!inFlight) state.nextStartAt = null
     },
 
+    tokenStored() {
+      const slowed = backoffMs !== null
+      refusals = 0
+      backoffMs = null
+      if (!slowed || !running || inFlight) return
+      clearTimeout(timer)
+      state.nextStartAt = now() + jitterMs(db.getSettings().intervalSec, random)
+      arm()
+    },
+
     setInterval(sec) {
       if (!Number.isInteger(sec) || sec < MIN_INTERVAL_SEC || sec > MAX_INTERVAL_SEC) {
         throw new RangeError(`interval must be a whole number of seconds from ${MIN_INTERVAL_SEC} to ${MAX_INTERVAL_SEC}`)
       }
       db.setIntervalSec(sec)
-      if (!running) return
+      if (!running || backoffMs !== null) return
       if (inFlight) {
         state.nextStartAt = cycleStartedAt + jitterMs(sec, random)
       } else {

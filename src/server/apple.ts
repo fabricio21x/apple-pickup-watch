@@ -20,6 +20,7 @@ export type CheckRequest = {
   watchedParts: PartNumber[]
   otherParts: PartNumber[]
   enabledStores: StoreNumber[]
+  firstRefusalExpiresAt?: number
 }
 
 export type Apple = {
@@ -28,6 +29,7 @@ export type Apple = {
   check(request: CheckRequest): Promise<CheckOutcome>
 }
 
+const REFUSALS = new Set([541, 401, 403, 429])
 const ZIP_RE = /^\d{5}$/
 const PART_RE = /^[A-Z0-9]{5}LL\/A$/
 const STORE_RE = /^R\d{3,4}$/
@@ -174,7 +176,7 @@ export function createApple(deps: { fetch: typeof fetch; now: () => number; time
       }
     },
 
-    async check({ zip, token, watchedParts, otherParts, enabledStores }) {
+    async check({ zip, token, watchedParts, otherParts, enabledStores, firstRefusalExpiresAt }) {
       const parts = [...watchedParts, ...otherParts]
       const partParams = parts.map((p, i) => `parts.${i}=${encodeURIComponent(p)}`).join('&')
       const res = await get(
@@ -182,8 +184,10 @@ export function createApple(deps: { fetch: typeof fetch; now: () => number; time
         { cookie: `dssid2=${token.dssid2}; shld_bt_ck=${token.shldBtCk}`, 'user-agent': token.userAgent },
       )
       if (!res) return { ok: false, cause: 'network' }
-      if (res.status === 541 || res.status === 401 || res.status === 403) {
-        return { ok: false, cause: deps.now() > token.expiresAt ? 'token-expired' : 'token-rejected' }
+      if (REFUSALS.has(res.status)) {
+        if (deps.now() > token.expiresAt) return { ok: false, cause: 'token-expired' }
+        const freshPairRefused = firstRefusalExpiresAt !== undefined && token.expiresAt > firstRefusalExpiresAt
+        return { ok: false, cause: freshPairRefused ? 'network-limited' : 'token-rejected' }
       }
       const envelope = res.status === 200 ? FulfillmentEnvelope.safeParse(res.body) : undefined
       if (!envelope?.success) return { ok: false, cause: 'unexpected' }

@@ -17,7 +17,7 @@ export type AlertedRow = { part: PartNumber; store: StoreNumber }
 export type HealthState = { failures: number; downAnnounced: boolean }
 export type FailureCause = Extract<CheckOutcome, { ok: false }>['cause']
 export type HealthResult = { ok: true } | { ok: false; cause: FailureCause }
-export type HealthMessage = { kind: 'down'; cause: FailureCause } | { kind: 'up' }
+export type HealthMessage = { kind: 'down'; cause: FailureCause; slowedMin?: number } | { kind: 'up' }
 
 const DOWN_AFTER_FAILURES = 3
 

@@ -55,6 +55,7 @@ const notice = (heading: string, body: string): OutgoingMessage => ({ text: `${h
 const CAUSE_TEXT: Record<FailureCause, string> = {
   'token-expired': 'the Apple token has expired',
   'token-rejected': 'Apple rejected the token',
+  'network-limited': 'Apple is limiting your network: a fresh token was refused too',
   network: 'Apple could not be reached (network problem)',
   unexpected: 'Apple sent an unexpected response',
 }
@@ -64,9 +65,10 @@ const REFRESH_TOKEN = 'Paste a fresh cURL or open apple.com in Brave.'
 export function healthMessage(message: HealthMessage): OutgoingMessage {
   if (message.kind === 'up') return notice('✅ <b>Back up</b>', 'Monitoring is back up. Stock alerts are working again.')
   const fix = message.cause === 'token-expired' || message.cause === 'token-rejected' ? ` ${REFRESH_TOKEN}` : ''
+  const slowed = message.slowedMin === undefined ? '' : ` Checks slowed to every ${message.slowedMin} min until Apple accepts them again.`
   return notice(
     '🚨 <b>Monitoring is down</b>',
-    `${CAUSE_TEXT[message.cause]}. No stock alerts will arrive until this is fixed.${fix}`,
+    `${CAUSE_TEXT[message.cause]}. No stock alerts will arrive until this is fixed.${fix}${slowed}`,
   )
 }
 

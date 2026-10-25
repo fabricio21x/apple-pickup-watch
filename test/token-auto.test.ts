@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { needsRefresh, nextCheckDelayMs } from '../scripts/token-auto'
+import { needsRefresh, nextCheckDelayMs, shouldRenewOnRejection } from '../scripts/token-auto'
 
 const NOW = Date.parse('2026-10-24T12:00:00Z')
 const MIN = 60_000
@@ -42,4 +42,27 @@ describe('nextCheckDelayMs', () => {
     expect(nextCheckDelayMs(NOW + 5 * MIN, NOW)).toBe(MIN)
     expect(nextCheckDelayMs(NOW - MIN, NOW)).toBe(MIN)
   })
+})
+
+describe('shouldRenewOnRejection', () => {
+  it('renews when the server reports the token rejected and no forced renewal happened yet', () => {
+    expect(shouldRenewOnRejection('rejected', null, NOW)).toBe(true)
+  })
+
+  it('renews when the last forced renewal was 10 minutes ago or more', () => {
+    expect(shouldRenewOnRejection('rejected', NOW - 10 * MIN, NOW)).toBe(true)
+    expect(shouldRenewOnRejection('rejected', NOW - 30 * MIN, NOW)).toBe(true)
+  })
+
+  it('waits when the last forced renewal was less than 10 minutes ago', () => {
+    expect(shouldRenewOnRejection('rejected', NOW - 10 * MIN + 1, NOW)).toBe(false)
+    expect(shouldRenewOnRejection('rejected', NOW - MIN, NOW)).toBe(false)
+  })
+
+  it.each(['working', 'untested', 'expired', 'missing', undefined] as const)(
+    'does not renew when the token status is %s',
+    (status) => {
+      expect(shouldRenewOnRejection(status, null, NOW)).toBe(false)
+    },
+  )
 })

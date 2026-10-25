@@ -39,7 +39,7 @@ export type CheckOutcome =
       observations: Observation[]
       stores: { store: StoreNumber; name: string; distanceMi: number }[]
     }
-  | { ok: false; cause: 'network' | 'token-expired' | 'token-rejected' | 'unexpected' }
+  | { ok: false; cause: 'network' | 'token-expired' | 'token-rejected' | 'network-limited' | 'unexpected' }
 
 export type GridCell = {
   part: PartNumber

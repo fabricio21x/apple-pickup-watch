@@ -271,7 +271,10 @@ export function createApi(deps: ApiDeps) {
 
     const stored = db.getSettings().token
     const stores = pasted.success || stored === null || result.token.expiresAt > stored.expiresAt
-    if (stores) db.setToken(result.token)
+    if (stores) {
+      db.setToken(result.token)
+      monitor.tokenStored()
+    }
     return c.json({ stored: stores, token: monitor.snapshot().token })
   })
 
