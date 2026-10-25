@@ -11,7 +11,7 @@ Apple's stock endpoint is undocumented and bot-protected. What we know about it 
 ## Goal and success measure
 Goal: the user gets a Telegram alert, within about one check cycle (60 s ±15 s), when a watched configuration becomes available for pickup at a selected store, and can open that configuration's buy page from the alert to check out.
 
-Success measure: during a real stock event before or after 2026-11-01, the user receives the in-stock alert for a watched configuration and store, and reaches the buy page from the alert's button.
+Success measure: during a real stock event before or after 2026-11-01, the user receives the in-stock alert for a watched configuration and store, and reaches the buy page from the alert's buy button.
 
 ## Users affected
 - The single user who runs the monitor and buys the phone (owner and only operator).
@@ -22,13 +22,17 @@ Success measure: during a real stock event before or after 2026-11-01, the user 
 - Location: one 5-digit US zip code; the nearby stores Apple returns (up to 12) are listed with distance and a toggle each, all on by default.
 - Other colors: each watch also covers the other colors of the same model and storage, on by default, with a per-watch switch "Also alert for other colors".
 - Poller: one `fulfillment-messages` request for all watched parts, plus the other-color parts of watches with the switch on, every 60 s ±15 s random jitter, interval adjustable in the UI.
+- Parts cap: at most 20 tracked parts (watched plus other-color), because Apple returns at most 20 parts per request. A new watch or an other-colors switch that would go past 20 is refused with a message saying how many parts it would add, and the page always shows "N / 20 parts tracked".
 - Token acquisition: a time-boxed (1 day) spike on getting a working `dssid2` + `shld_bt_ck` pair automatically (Playwright, and attaching over CDP to a normally launched Brave with the user's profile); if no automated variant keeps working for 2+ hours unattended, a browser extension that pushes the pair from the user's real browser; pasting a cURL into the UI as the fallback in either case.
 - Stock state: `pickupDisplay: "available"` counts as in stock, labelled Today or Tomorrow from the quote; every other value (`unavailable`, `default`) counts as not in stock. Last known state per (part, store) is persisted, so a restart does not re-alert.
-- Telegram alerts: in-stock alert when a (part, store) pair goes from not in stock to in stock; out-of-stock alert when it goes back; nothing repeated while the state is unchanged.
-- In-stock alert content: model, storage, color, store name, distance, Today/Tomorrow, and a button to that configuration's buy page (with the zip in the link if Apple's URL supports it).
-- Other-color alerts: an other-color part follows the same in-stock / out-of-stock rules as a watched part, and its messages are clearly labelled "Other color" with the watched color they relate to.
+- Telegram alerts, one message per model + storage: when a check finds that any tracked (part, enabled store) pair of a model + storage came in or went out, one new message for that model + storage; nothing while unchanged. A store that stays in stock and only changes between Today and Tomorrow sends nothing.
+- Stock message content: the model and storage as a bold heading; a section per color that is in stock, watched colors first and the others labelled "Other color"; under each color, its stores grouped Today and Tomorrow as plain text with their distance; stores new since the last message marked 🆕; a line naming the stores that just went out; one buy button per in-stock color under the message. When no store is left for the model + storage, the message says it is sold out everywhere. Emojis tell in stock, new and out apart.
+- Sound: a message that adds at least one store notifies; a message where stores only went out arrives silently.
+- Buy links: each color's button opens that configuration's buy page with as many as Apple's URL supports of: the color, Unlocked, No trade-in, a store for pickup, and the zip. Whatever the URL can't carry is left for the user to pick on the page.
+- Other colors: an other-color part follows the same in / out rules as a watched part and appears in its model + storage message under its color, labelled "Other color".
 - Health alerts: one "monitoring is down" alert after 3 consecutive failed checks, naming the cause (token expired/rejected, network, unexpected response), and one "back up" alert when checks succeed again.
-- UI: one mobile-first, well-organised page: zip + store toggles, product picker, live watch × store grid (Today / Tomorrow / unavailable, last-checked time), settings strip (Telegram status and test message, token status, check interval, Wi-Fi access opt-in).
+- Other messages (down, back up, token expiring, monitor started) use the same style: each kind has its own emoji and bold heading.
+- UI: mobile-first views with client-side navigation, a sidebar on wide screens and bottom tabs on the phone, the current view kept in the URL. Stock board (home): every tracked part × enabled store with Today / Tomorrow / unavailable, in stock first, plus the last successful check and health. Watches: product picker, watches with their other-colors switch, and the parts count. Stores: zip + store toggles. Settings: Telegram status and test message, token status and cURL paste, check interval, Wi-Fi access opt-in.
 - Network exposure: the server listens on localhost by default; an opt-in setting exposes it on the local network; API responses never include the Telegram bot token or Apple cookies.
 
 ## Out of scope
@@ -37,7 +41,9 @@ Success measure: during a real stock event before or after 2026-11-01, the user 
 - Several zip codes at once: one location covers the user's stated need with one request per check.
 - Non-US stores: the user watches US Apple Stores only.
 - Model-level watches ("any 18 Pro Max"): exact configurations first; can come later.
-- Preselecting the store or automating checkout: the user picks the store and checks out themselves.
+- Automating checkout: the user checks out themselves.
+- Preselecting buy-page options by anything other than the URL (scripted clicks, a browser helper): the links preselect what Apple's URL allows, and the 2026-11-01 deadline leaves no room for more.
+- More than 20 tracked parts: needs several requests per check, which is a redesign.
 - Zip autocomplete: a 5-digit zip needs none, and the typeahead returned nothing from plain HTTP.
 - Keeping the Mac awake: the user's Mac is always on.
 - Models other than iPhone 18 Pro, 18 Pro Max and iPhone Duo: not needed now.
@@ -46,19 +52,23 @@ Success measure: during a real stock event before or after 2026-11-01, the user 
 - [ ] The product picker lists every configuration found on Apple's iPhone 18 Pro and iPhone Duo buy pages, each shown as model, storage and color, and selecting one or more creates a watch per configuration.
 - [ ] Entering a valid 5-digit US zip lists the stores Apple returns for it with name and distance, all toggled on; a store toggled off never triggers an alert.
 - [ ] Each check sends exactly one `fulfillment-messages` request covering all watched parts and the other-color parts of watches with the switch on, and consecutive checks are 45–75 s apart at the default interval.
-- [ ] A new watch has "Also alert for other colors" on; turning it off stops other-color messages for that watch.
-- [ ] When a same-model, same-storage, different-color part of a watch with the switch on changes to `available` at an enabled store, one Telegram message labelled "Other color" arrives with the same fields and buy-page button as an in-stock alert, and one labelled out-of-stock message arrives when it changes back.
+- [ ] Tracked parts never exceed 20: adding a watch or turning on other colors that would go past 20 is refused with a message saying how many parts it would add, and the Watches view shows "N / 20 parts tracked".
+- [ ] A new watch has "Also alert for other colors" on; turning it off stops other-color entries for that watch.
+- [ ] When a same-model, same-storage, different-color part of a watch with the switch on changes to `available` at an enabled store, it appears in that model + storage message under its color, labelled "Other color", by the same in / out rules as a watched part.
 - [ ] Changing the interval in the UI changes the time between checks without a restart.
-- [ ] When a watched (part, enabled store) pair changes from not in stock to `available`, one Telegram message arrives within one check cycle containing model, storage, color, store name, distance, "Today" or "Tomorrow", and a button that opens that configuration's buy page.
-- [ ] When that pair changes back to not in stock, one Telegram out-of-stock message arrives.
-- [ ] While a pair's state is unchanged, no further message is sent for it, including after the server restarts.
+- [ ] When one or more tracked pairs of a model + storage change from not in stock to `available` in a check, exactly one Telegram message for that model + storage arrives within one check cycle, with sound, listing every enabled store where each of its tracked colors is in stock, grouped Today and Tomorrow with their distance, the new stores marked 🆕, and one buy button per in-stock color.
+- [ ] When pairs of a model + storage only go back to not in stock in a check, exactly one silent message arrives listing the stores still in stock and naming those that went out; when none is left, it says sold out everywhere.
+- [ ] Each buy button opens the buy page with every option the design found Apple's URL to support preselected (from color, Unlocked, No trade-in, store, zip).
+- [ ] While a pair's state is unchanged, no further message is sent for it, including after the server restarts; a change between Today and Tomorrow alone sends nothing.
+- [ ] Down, back up, token expiring and monitor started messages each carry their own emoji and bold heading.
 - [ ] `unavailable` and `default` are both treated as not in stock.
 - [ ] After 3 consecutive failed checks, exactly one "monitoring is down" message arrives naming the cause; when a check next succeeds, exactly one "back up" message arrives.
-- [ ] The settings strip shows whether the Apple token is working, and the user can paste a cURL from their browser to replace it.
+- [ ] The Settings view shows whether the Apple token is working, and the user can paste a cURL from their browser to replace it.
 - [ ] The token spike ends within 1 day with a written result; if no automated variant kept working for 2+ hours unattended, the browser extension keeps the server's token valid while Brave is open.
 - [ ] The "send test message" button delivers a Telegram message to the configured chat.
-- [ ] The watch × store grid shows Today / Tomorrow / unavailable for each pair and the time of the last successful check.
-- [ ] The page is fully usable at 375 px width with no horizontal scroll.
+- [ ] The Stock board shows Today / Tomorrow / unavailable for each tracked pair, in-stock pairs first, and the time of the last successful check.
+- [ ] Stock board, Watches, Stores and Settings are separate views reached from a sidebar on wide screens and bottom tabs at phone width; a refresh or the browser's back button keeps or returns to the view.
+- [ ] Every view is fully usable at 375 px width with no horizontal scroll.
 - [ ] By default the server is unreachable from another device on the network; after enabling the Wi-Fi opt-in it is reachable from the phone on the same network.
 - [ ] No API response contains the Telegram bot token or the Apple cookie values.
 - [ ] The whole app starts locally with one command.
@@ -75,6 +85,11 @@ Success measure: during a real stock event before or after 2026-11-01, the user 
 - The user prefers TypeScript, React and Node, and agreed to Hono + Vite + React with SQLite in one process (user, 2026-10-22)
 - The user wants the UI built with shadcn/ui (user, 2026-10-22)
 - The app runs locally for now; a later deploy may target Railway (user, 2026-10-22)
+- Apple returns at most 20 parts per `fulfillment-messages` request (docs/features/2026-10-22-pickup-watch/plan.md:124)
+- Tracking at most 20 parts is acceptable for now (user, 2026-10-23)
+- Buy links should preselect Unlocked and No trade-in (user, 2026-10-23)
+- The owner uses the page on the Mac and the phone about equally (user, 2026-10-23)
+- Prefers HTML or Markdown formatting for Telegram messages (user, 2026-10-23)
 
 ## Assumptions
 None
@@ -106,3 +121,11 @@ None
 - 2026-10-22: Listen on localhost by default with a Wi-Fi opt-in; never return secrets from the API. Why: no login exists in v1, and login belongs with the later deploy.
 - 2026-10-22: No sleep prevention. Why: the user's Mac is always on.
 - 2026-10-22: US stores only, one location, no deploy, no login, no auto-checkout in this feature. Why: the user's stated scope and the 2026-11-01 deadline.
+- 2026-10-23: Amended: one message per model + storage, with a section per color and its stores as buy links grouped Today and Tomorrow, replacing one message per (part, store) with a button. Why: change 1 (user, walkthrough 2026-10-23); grouping by model + storage over per part because the owner watches all 4 colors of one model, so a restock is 1 notification instead of up to 4.
+- 2026-10-23: Amended: each change sends a new message with the full current store list, new stores marked and gone stores named, rather than only the stores that changed or one message edited in place. Why: change 1 (user, 2026-10-23); the latest message is always the whole picture, and Telegram edits make no sound.
+- 2026-10-23: Amended: messages that add a store notify; messages where stores only went out are silent; a Today/Tomorrow change alone sends nothing. Why: change 1 (user, 2026-10-23); only new stock needs action, and the day labels flip on their own twice a day.
+- 2026-10-23: Amended: all Telegram messages get emojis and bold headings; the HTML or Markdown choice is left to /fbs:architect as the owner's preference. Why: change 1 (user, 2026-10-23).
+- 2026-10-23: Amended: buy links preselect, as far as Apple's URL allows, the color, Unlocked, No trade-in, the store and the zip; store preselection moves back into scope. Why: change 2 (user, 2026-10-23); best effort, because nobody knows yet what Apple's URL accepts and the deadline is fixed.
+- 2026-10-23: Amended: the page becomes Stock board, Watches, Stores and Settings views with a sidebar on wide screens and bottom tabs on the phone, replacing the single page. Why: change 4 (user, 2026-10-23); the owner uses both screens equally, and the stock board is what they check most.
+- 2026-10-23: Amended: at most 20 tracked parts; a change that would exceed it is refused and the page shows the count. Why: change 5 (user, 2026-10-23); Apple returns at most 20 parts per request, and nothing set up is dropped silently.
+- 2026-10-23: Amended: one buy button per in-stock color, with store names as plain text, replacing a buy link per store name. Why: change 2 (user, 2026-10-23); Apple's buy URL has no key for a store, so every store link would open the same page (gulag: staff-engineer-2).

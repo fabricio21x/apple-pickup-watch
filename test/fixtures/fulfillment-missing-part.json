@@ -1,0 +1,338 @@
+{
+  "head": {
+    "status": "200",
+    "data": {}
+  },
+  "body": {
+    "content": {
+      "pickupMessage": {
+        "stores": [
+          {
+            "storeNumber": "R250",
+            "storeName": "West 14th Street",
+            "storedistance": 0.66,
+            "city": "New York",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R415",
+            "storeName": "Grand Central",
+            "storedistance": 1.35,
+            "city": "New York",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R032",
+            "storeName": "SoHo",
+            "storedistance": 1.77,
+            "city": "New York",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R095",
+            "storeName": "Fifth Avenue",
+            "storedistance": 1.8,
+            "city": "New York",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R251",
+            "storeName": "Upper West Side",
+            "storedistance": 1.99,
+            "city": "New York",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R582",
+            "storeName": "Upper East Side",
+            "storedistance": 2.55,
+            "city": "New York",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R654",
+            "storeName": "World Trade Center",
+            "storedistance": 2.72,
+            "city": "New York",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R594",
+            "storeName": "Williamsburg",
+            "storedistance": 3.29,
+            "city": "Brooklyn",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R715",
+            "storeName": "Downtown Brooklyn",
+            "storedistance": 4.66,
+            "city": "Brooklyn",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R755",
+            "storeName": "American Dream",
+            "storedistance": 5.29,
+            "city": "East Rutherford",
+            "state": "NJ",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R612",
+            "storeName": "Queens Center",
+            "storedistance": 7.09,
+            "city": "Elmhurst",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "storeNumber": "R753",
+            "storeName": "The Mall at Bay Plaza",
+            "storedistance": 12.07,
+            "city": "Bronx",
+            "state": "NY",
+            "partsAvailability": {
+              "MJQ84LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Silver"
+                  }
+                }
+              },
+              "MJQ94LL/A": {
+                "pickupDisplay": "unavailable",
+                "pickupSearchQuote": "Currently unavailable",
+                "messageTypes": {
+                  "regular": {
+                    "storePickupProductTitle": "iPhone 18 Pro 512GB Burgundy"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
