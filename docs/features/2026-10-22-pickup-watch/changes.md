@@ -75,3 +75,20 @@
 - Level: design (spec.md:35 and :69 still hold; design.md decision 18's stock board layout changes)
 - Status: done
 - Outcome: design level; design.md gained `## UI direction` (impeccable shape brief, approved by the owner 2026-10-25) and decision 18 points the stock board at it; `PRODUCT.md` and `mockups/stock-board.html` added; design approved by the owner ("yeah it looks good, approved", 2026-10-25). Task T22 in plan.md, not started at the owner's request.
+
+## C10: Stock board follow-ups from review
+- Date: 2026-10-25
+- Source: user, agreeing to bundle the non-blocking review findings on the redesigned stock board (T22 review and the change-9 final review, recorded in plan.md)
+- Words: sure, lets do the change
+- Level: build, except one design wording fix. The items, with their evidence:
+  1. The cap note's "Trim your watches" link shows above the phones but comes after them in keyboard order (src/web/StockBoard.tsx:86; WCAG 2.4.3).
+  2. The Buy link's accessible name doesn't start with its visible "Buy <color>" (src/web/StockBoard.tsx:143; WCAG 2.5.3).
+  3. The loading skeleton's `role="status"` has no text to announce (src/web/StockBoard.tsx:373).
+  4. The status strip's live region re-announces the token time every minute (src/web/StockBoard.tsx:110).
+  5. The stale stock under the down banner, faded to 55 %, drops muted text below AA contrast and lacks the mockup's `aria-describedby` to "Last known stock" (src/web/StockBoard.tsx:71).
+  6. While setup is incomplete the stock view shows neither health nor the last check, now that the chips are hidden there (src/web/StockBoard.tsx:86).
+  7. Between 768 and 1099 px the column is wider than the mockup's 720 px (src/web/App.tsx:90).
+  8. design.md's UI direction Data paragraph says freshness comes from `lastCheckAt`, while spec.md:69 and the code use the last successful check (design wording).
+  9. The app has no favicon, so every page load logs a 404 for `/favicon.ico`.
+- Status: open
+- Outcome: pending
