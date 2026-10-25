@@ -100,3 +100,12 @@
 - Level: design (design.md decisions 13 and 21: token:auto refreshes before each expiry; it should also renew when the server reports the token rejected)
 - Status: open
 - Outcome: pending; not built until the owner asks
+
+## C12: Apple blocked the home network's stock checks
+- Date: 2026-10-25
+- Source: user, after the 2026-10-25 outage (C11)
+- Words: yes, indeed I thikn my ip was blocked. When I switched to cellular data it worked but with myu network I was blocked, we need to fix this.
+- Evidence: from about 20:34Z every `fulfillment-messages` request from the Mac answered 541, with the stored pair, a freshly renewed pair and a brand-new session alike, while the buy page answered 200; the owner's own browser was blocked on the home network and worked on cellular. The interval had been 45 s that day (the spec's default is 60 s ±15 s, spec.md:24, :54). The monitor reported the cause as "token-rejected", because it can't tell a rejected token from a blocked network (both are 541).
+- Level: to be sized
+- Status: open
+- Outcome: pending
