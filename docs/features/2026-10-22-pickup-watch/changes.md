@@ -73,5 +73,5 @@
 - Source: user
 - Words: Redesign the stock board (the main dashboard view) properly: run the UI direction for it with impeccable, shape with me and then mockups. Stop after I approve the design; don't build it yet.
 - Level: design (spec.md:35 and :69 still hold; design.md decision 18's stock board layout changes)
-- Status: open
-- Outcome: pending
+- Status: planned
+- Outcome: design level; design.md gained `## UI direction` (impeccable shape brief, approved by the owner 2026-10-25) and decision 18 points the stock board at it; `PRODUCT.md` and `mockups/stock-board.html` added; design approved by the owner ("yeah it looks good, approved", 2026-10-25). Task T22 in plan.md, not started at the owner's request.
