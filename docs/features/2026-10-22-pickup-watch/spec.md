@@ -21,16 +21,16 @@ Success measure: during a real stock event before or after 2026-11-01, the user 
 - Watches: the user picks one or more exact configurations from the list (Model → Storage → Color, multi-select).
 - Location: one 5-digit US zip code; the nearby stores Apple returns (up to 12) are listed with distance and a toggle each, all on by default.
 - Other colors: each watch also covers the other colors of the same model and storage, on by default, with a per-watch switch "Also alert for other colors".
-- Poller: one `fulfillment-messages` request for all watched parts, plus the other-color parts of watches with the switch on, every 60 s ±15 s random jitter, interval adjustable in the UI.
+- Poller: one `fulfillment-messages` request for all watched parts, plus the other-color parts of watches with the switch on, every 60 s ±15 s random jitter, interval adjustable in the UI. When Apple refuses a check (HTTP 541, 401, 403 or 429), the next checks start 2, then 5, then 10 minutes later and stay 10 minutes apart until one succeeds; a success, or a newly stored token, returns checks to the set interval. Network errors and timeouts on the owner's side keep the set interval.
 - Parts cap: at most 20 tracked parts (watched plus other-color), because Apple returns at most 20 parts per request. A new watch or an other-colors switch that would go past 20 is refused with a message saying how many parts it would add, and the page always shows "N / 20 parts tracked".
-- Token acquisition: a time-boxed (1 day) spike on getting a working `dssid2` + `shld_bt_ck` pair automatically (Playwright, and attaching over CDP to a normally launched Brave with the user's profile); if no automated variant keeps working for 2+ hours unattended, a browser extension that pushes the pair from the user's real browser; pasting a cURL into the UI as the fallback in either case.
+- Token acquisition: a time-boxed (1 day) spike on getting a working `dssid2` + `shld_bt_ck` pair automatically (Playwright, and attaching over CDP to a normally launched Brave with the user's profile); if no automated variant keeps working for 2+ hours unattended, a browser extension that pushes the pair from the user's real browser; pasting a cURL into the UI as the fallback in either case. When the monitor reports the token rejected, the automated token source fetches a fresh pair right away, at most once every 10 minutes.
 - Stock state: `pickupDisplay: "available"` counts as in stock, labelled Today or Tomorrow from the quote; every other value (`unavailable`, `default`) counts as not in stock. Last known state per (part, store) is persisted, so a restart does not re-alert.
 - Telegram alerts, one message per model + storage: when a check finds that any tracked (part, enabled store) pair of a model + storage came in or went out, one new message for that model + storage; nothing while unchanged. A store that stays in stock and only changes between Today and Tomorrow sends nothing.
 - Stock message content: the model and storage as a bold heading; a section per color that is in stock, watched colors first and the others labelled "Other color"; under each color, its stores grouped Today and Tomorrow as plain text with their distance; stores new since the last message marked 🆕; a line naming the stores that just went out; one buy button per in-stock color under the message. When no store is left for the model + storage, the message says it is sold out everywhere. Emojis tell in stock, new and out apart.
 - Sound: a message that adds at least one store notifies; a message where stores only went out arrives silently.
 - Buy links: each color's button opens that configuration's buy page with as many as Apple's URL supports of: the color, Unlocked, No trade-in, a store for pickup, and the zip. Whatever the URL can't carry is left for the user to pick on the page.
 - Other colors: an other-color part follows the same in / out rules as a watched part and appears in its model + storage message under its color, labelled "Other color".
-- Health alerts: one "monitoring is down" alert after 3 consecutive failed checks, naming the cause (token expired/rejected, network, unexpected response), and one "back up" alert when checks succeed again.
+- Health alerts: one "monitoring is down" alert after 3 consecutive failed checks, naming the cause (token expired/rejected, Apple limiting the network when a fresh token is refused too, network, unexpected response) and, when checks are slowed, that they are, and one "back up" alert when checks succeed again.
 - Other messages (down, back up, token expiring, monitor started) use the same style: each kind has its own emoji and bold heading.
 - UI: mobile-first views with client-side navigation, a sidebar on wide screens and bottom tabs on the phone, the current view kept in the URL. Stock board (home): every tracked part × enabled store with Today / Tomorrow / unavailable, in stock first, plus the last successful check and health. Watches: product picker, watches with their other-colors switch, and the parts count. Stores: zip + store toggles. Settings: Telegram status and test message, token status and cURL paste, check interval, Wi-Fi access opt-in.
 - Network exposure: the server listens on localhost by default; an opt-in setting exposes it on the local network; API responses never include the Telegram bot token or Apple cookies.
@@ -44,6 +44,7 @@ Success measure: during a real stock event before or after 2026-11-01, the user 
 - Automating checkout: the user checks out themselves.
 - Preselecting buy-page options by anything other than the URL (scripted clicks, a browser helper): the links preselect what Apple's URL allows, and the 2026-11-01 deadline leaves no room for more.
 - More than 20 tracked parts: needs several requests per check, which is a redesign.
+- Sending Apple traffic through another network (a proxy service or a cellular exit): not needed while blocks are temporary and the monitor backs off; revisit if blocks persist.
 - Zip autocomplete: a 5-digit zip needs none, and the typeahead returned nothing from plain HTTP.
 - Keeping the Mac awake: the user's Mac is always on.
 - Models other than iPhone 18 Pro, 18 Pro Max and iPhone Duo: not needed now.
@@ -51,18 +52,20 @@ Success measure: during a real stock event before or after 2026-11-01, the user 
 ## Acceptance criteria
 - [ ] The product picker lists every configuration found on Apple's iPhone 18 Pro and iPhone Duo buy pages, each shown as model, storage and color, and selecting one or more creates a watch per configuration.
 - [ ] Entering a valid 5-digit US zip lists the stores Apple returns for it with name and distance, all toggled on; a store toggled off never triggers an alert.
-- [ ] Each check sends exactly one `fulfillment-messages` request covering all watched parts and the other-color parts of watches with the switch on, and consecutive checks are 45–75 s apart at the default interval.
+- [ ] Each check sends exactly one `fulfillment-messages` request covering all watched parts and the other-color parts of watches with the switch on, and while checks succeed, consecutive checks are 45–75 s apart at the default interval.
 - [ ] Tracked parts never exceed 20: adding a watch or turning on other colors that would go past 20 is refused with a message saying how many parts it would add, and the Watches view shows "N / 20 parts tracked".
 - [ ] A new watch has "Also alert for other colors" on; turning it off stops other-color entries for that watch.
 - [ ] When a same-model, same-storage, different-color part of a watch with the switch on changes to `available` at an enabled store, it appears in that model + storage message under its color, labelled "Other color", by the same in / out rules as a watched part.
 - [ ] Changing the interval in the UI changes the time between checks without a restart.
+- [ ] After Apple refuses a check (HTTP 541, 401, 403 or 429), the following checks start 2, 5 and then 10 minutes later and stay 10 minutes apart until one succeeds; after a success, or once a newer token is stored, checks return to the set interval. A network error or timeout does not slow checks.
+- [ ] When the monitor reports the token rejected, the automated token source stores a fresh pair within 2 minutes, at most once every 10 minutes; if the fresh pair is refused too, the down message names Apple limiting the network instead of a rejected token.
 - [ ] When one or more tracked pairs of a model + storage change from not in stock to `available` in a check, exactly one Telegram message for that model + storage arrives within one check cycle, with sound, listing every enabled store where each of its tracked colors is in stock, grouped Today and Tomorrow with their distance, the new stores marked 🆕, and one buy button per in-stock color.
 - [ ] When pairs of a model + storage only go back to not in stock in a check, exactly one silent message arrives listing the stores still in stock and naming those that went out; when none is left, it says sold out everywhere.
 - [ ] Each buy button opens the buy page with every option the design found Apple's URL to support preselected (from color, Unlocked, No trade-in, store, zip).
 - [ ] While a pair's state is unchanged, no further message is sent for it, including after the server restarts; a change between Today and Tomorrow alone sends nothing.
 - [ ] Down, back up, token expiring and monitor started messages each carry their own emoji and bold heading.
 - [ ] `unavailable` and `default` are both treated as not in stock.
-- [ ] After 3 consecutive failed checks, exactly one "monitoring is down" message arrives naming the cause; when a check next succeeds, exactly one "back up" message arrives.
+- [ ] After 3 consecutive failed checks, exactly one "monitoring is down" message arrives naming the cause (and that checks are slowed, when they are); when a check next succeeds, exactly one "back up" message arrives.
 - [ ] The Settings view shows whether the Apple token is working, and the user can paste a cURL from their browser to replace it.
 - [ ] The token spike ends within 1 day with a written result; if no automated variant kept working for 2+ hours unattended, the browser extension keeps the server's token valid while Brave is open.
 - [ ] The "send test message" button delivers a Telegram message to the configured chat.
@@ -90,6 +93,9 @@ Success measure: during a real stock event before or after 2026-11-01, the user 
 - Buy links should preselect Unlocked and No trade-in (user, 2026-10-23)
 - The owner uses the page on the Mac and the phone about equally (user, 2026-10-23)
 - Prefers HTML or Markdown formatting for Telegram messages (user, 2026-10-23)
+- On 2026-10-25, at a 45 s interval, Apple refused every stock check from the owner's home network for about 30 minutes, then accepted the same token again; the owner's browser was blocked on the home network and worked on cellular (user, 2026-10-25)
+- The owner wants the monitor to handle Apple's blocks itself rather than reroute Apple traffic off the home network for now (user, 2026-10-25)
+- The check interval is back to the 60 s default (user, 2026-10-25)
 
 ## Assumptions
 None
@@ -129,3 +135,6 @@ None
 - 2026-10-23: Amended: the page becomes Stock board, Watches, Stores and Settings views with a sidebar on wide screens and bottom tabs on the phone, replacing the single page. Why: change 4 (user, 2026-10-23); the owner uses both screens equally, and the stock board is what they check most.
 - 2026-10-23: Amended: at most 20 tracked parts; a change that would exceed it is refused and the page shows the count. Why: change 5 (user, 2026-10-23); Apple returns at most 20 parts per request, and nothing set up is dropped silently.
 - 2026-10-23: Amended: one buy button per in-stock color, with store names as plain text, replacing a buy link per store name. Why: change 2 (user, 2026-10-23); Apple's buy URL has no key for a store, so every store link would open the same page (gulag: staff-engineer-2).
+- 2026-10-25: Amended: when Apple refuses checks, the monitor backs off (2, 5, then 10 minutes) until a success or a newer token, and names the cause; network errors keep the set interval. Why: change 12 (user, 2026-10-25); a 30-minute block at a 45 s interval cleared by itself, and backing off is what lets a block clear, at no cost.
+- 2026-10-25: Amended: the automated token source fetches a fresh pair as soon as the token is reported rejected, at most once every 10 minutes, and a refusal of that fresh pair is reported as Apple limiting the network. Why: changes 11 and 12 (user, 2026-10-25); without it an early rejection left monitoring down until 20 minutes before expiry, and 541 alone can't tell a bad token from a blocked network.
+- 2026-10-25: Rerouting Apple traffic off the home network (a proxy service or a cellular exit) is not pursued for now. Why: the owner chose handling blocks in the monitor once the block proved temporary (user, 2026-10-25).

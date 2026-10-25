@@ -128,17 +128,20 @@ The first version of this design was written before any code existed, so the row
    - The interval is 30–3600 s, default 60. Changing it while no cycle is in flight clears the pending timer and reschedules from now; while a cycle is in flight, it only updates `nextStartAt`.
    - Timeouts: 20 s for Apple, 10 s for Telegram.
 
-   Why: start-to-start spacing stays 45–75 s at the default (spec.md:48), the change applies without a restart (spec.md:51), and there is never a second timer chain.
+   - **Refusal backoff (change 12):** after a check whose outcome is a refusal (`token-rejected`, `token-expired` or `network-limited`, decision 8), the next start is not `interval × jitter` but 2 min, then 5 min, then 10 min, staying at 10 min; the count of consecutive refusals lives in memory beside `inFlight` and is cleared by a success, or by a newer token stored through `POST /api/token`, which also reschedules the next start to the set interval from now. `network` and `unexpected` outcomes keep the set interval.
+
+   Why: start-to-start spacing stays 45–75 s at the default while checks succeed (spec.md:54), the change applies without a restart (spec.md:58), there is never a second timer chain, and backing off is what lets one of Apple's temporary blocks clear (spec.md Facts, 2026-10-25).
 8. **Check outcome classification** in one place, `apple.ts`, by status first:
    - `fetch` threw or timed out → `network`;
-   - HTTP 541, 401 or 403 → `token-expired` when the stored `expiresAt` has passed, else `token-rejected`;
+   - HTTP 541, 401, 403 or 429 → `token-expired` when the stored `expiresAt` has passed; else `network-limited` when the token in use is newer than the one in use at the first refusal of the current run (a fresh pair was refused too, change 12); else `token-rejected`;
    - 5xx (HTML body or not), any other status, a non-JSON body, a schema failure, no enabled store in the response, or a watched part missing from every store → `unexpected`.
 
    An enabled store missing from a 200 response keeps its pairs' state, and the grid shows it as "not checked". An other-color part missing from every store keeps its state. When no token, zip or tracked pair exists, the check is skipped and health is untouched.
 9. **Health is persisted:** `failures` and `downAnnounced` live in `settings`.
    - The third consecutive failure sends one "monitoring is down" message naming the cause, and sets `downAnnounced` only once Telegram accepts it; a failed send retries on the next failure. A known token expiry skips the count (decision 21).
    - A success clears `failures`. When `downAnnounced` is set, it sends one "back up" message and clears the flag once accepted.
-   - Why: exactly one down and one up, even across a restart or a lost message (spec.md:56).
+   - The down message names the cause in words (`network-limited`: "Apple is limiting your network: a fresh token was refused too") and, while the refusal backoff is active, adds "Checks slowed to every <n> min until Apple accepts them again." The page's status strip shows the same cause.
+   - Why: exactly one down and one up, even across a restart or a lost message (spec.md:65).
 10. **Catalog from `product-locator-meta`** (option A), for families `iphone18pro` and `iphoneduo`, keeping `UNLOCKED/US` entries.
     - Fetched once at startup, as an upsert by part that never deletes, so watches keep a valid row. While the `parts` table is empty, each check cycle retries it.
     - Model name, capacity and color name come from splitting `productTitle` at the capacity token, after normalising non-breaking spaces. Siblings share `modelName + capacity`.
@@ -161,6 +164,7 @@ The first version of this design was written before any code existed, so the row
     - Apple's `Set-Cookie` replies are ignored; the spike measures whether adopting them helps.
     - Status for the strip: `missing | untested | working | rejected | expired`, plus the time left.
 13. **Token source order** follows the spec (spec.md:25, 102), with one change: the CDP variant uses a dedicated, normally launched Brave profile (`--user-data-dir` of its own). Brave on Chromium 155 ignores remote debugging on the default profile (user, 2026-10-23). An automated source that passes the spike becomes `scripts/token-auto.ts`, run as `npm run token:auto`: a separate process that posts to `POST /api/token` before each expiry. Otherwise the MV3 extension does it.
+    - **Renew on rejection (changes 11, 12):** besides renewing 20 minutes before expiry, `token-auto` reads `GET /api/state` (loopback) every minute; when `token.status` is `rejected`, it clears the profile's `dssid2` and `shld_bt_ck`, reloads the buy page and posts the fresh pair, at most once every 10 minutes. A fresh pair is strictly newer, so the server stores it, which resets the refusal backoff (decision 7); if Apple refuses that pair too, the next refusal is classified `network-limited` (decision 8).
 14. **Extension, built only when the spike says so** (MV3, loaded unpacked in the daily Brave profile):
     - its ID is pinned with a `key` in `manifest.json`;
     - permissions: `cookies` and `alarms`; hosts `https://www.apple.com/*` and `http://127.0.0.1/*`;
@@ -301,7 +305,7 @@ type StockMessage = {
 
 type CheckOutcome =
   | { ok: true; observations: Observation[]; stores: { store: StoreNumber; name: string; distanceMi: number }[] }
-  | { ok: false; cause: 'network' | 'token-expired' | 'token-rejected' | 'unexpected' }
+  | { ok: false; cause: 'network' | 'token-expired' | 'token-rejected' | 'network-limited' | 'unexpected' }
 
 type GridCell = { part: PartNumber; store: StoreNumber; badge: 'Today' | 'Tomorrow' | string | 'Unavailable' | 'Not checked' }
 
@@ -512,6 +516,9 @@ extension/                   only if the spike picks it
 | spec.md:74 one command | manual | `npm start` on a clean clone |
 | escaping (decision 25) | `telegram.test.ts` | A store name or label holding `<b>`, `&` and `"` renders literally; the message's only tag is `<b>` and it holds no URL |
 | refused message (decision 6) | `monitor.test.ts` | Telegram answers 400 for group 1; group 2 is still sent and committed, group 1's rows stay uncommitted and `lastError` holds the 400 |
+| refusal backoff (decision 7, change 12) | `monitor.test.ts` | Fake Apple answers 541: the next starts are 2, 5, 10, 10 min apart; a success returns to the set interval; a newer pair stored through the API resets the backoff and reschedules from now; a `network` failure keeps the set interval |
+| network-limited cause (decision 8, change 12) | `apple.test.ts` or `monitor.test.ts` | A refusal with the same token stays `token-rejected`; a refusal with a newer token than at the first refusal is `network-limited`; the down message names it and says checks are slowed |
+| renew on rejection (decision 13, changes 11-12) | `token-auto.test.ts` | The pure decision: renew when the server reports `rejected` and the last forced renewal was 10+ minutes ago; don't when it was sooner or the token is working |
 | store missing from a response (decision 6) | `domain.test.ts` | One store of a group goes out while another alerted store is missing from the 200: the message lists the missing one as "not checked" and does not say sold out |
 | other labels (decisions 3, 25) | `domain.test.ts`, `telegram.test.ts` | "today" in any case is Today; a store labelled "Available Thu 10/30" appears on its own line |
 | role race (decision 6) | `monitor.test.ts` | A watch is created for a color while that color's "Other color" message is in flight; the commit skips the insert and the next check sends it as watched |
@@ -528,7 +535,7 @@ Fixture guard: `apple.test.ts` fails if any fixture contains `dssid2=`, `shld_bt
 - **The buy page ignores the `-unlocked` suffix or `igt`** (unknown until the hand check): the link still opens the configuration's page, as before; `igt` is dropped unless it works.
 - **HTML formatting breaks a message** (low): a string that slips past `escapeHtml` makes Telegram answer 400. That group is skipped with the 400's `description` in `lastError` on the page, its rows stay uncommitted and it retries each check, while the other groups still go out (decision 6). The escaping test covers every interpolated field.
 - **Grouping delays a watched alert** (low): a group's message waits for nothing but its place in the order; groups with a watched in-stock event go first, as single events did.
-- **Apple blocks the session or IP at a 60 s rate** (medium): health reports it within about 3 minutes, and the interval can be raised. A block may also refuse the owner's own checkout from that IP; the README says to check out from the phone on cellular.
+- **Apple blocks the session or IP** (happened 2026-10-25 at a 45 s interval, about 30 minutes, cleared by itself): the scheduler backs off on refusals (decision 7), token-auto renews once to tell a bad token from a blocked network (decision 13), and the down message says which. A block may also refuse the owner's own checkout from that IP; the README says to check out from the phone on cellular. Rerouting Apple traffic off the home network is out of scope for now.
 - **No store or zip in the buy link** (settled): the page's parameter schema has no key for either, so a message carries one buy button per color, and the store is picked on Apple's page (decision 10).
 - **Apple changes JSON shapes or routes** (low per week, high over months): zod failures become `unexpected` and reach the down alert; the stored catalog keeps the picker working.
 - **First-start burst hits Telegram's limit** (medium): decision 6 paces, orders and bounds the send pass.
@@ -685,3 +692,5 @@ Stale: after the review, the owner chose open Wi-Fi access over security-1's LAN
 - 2026-10-25: UI brief approved. Why: user, 2026-10-25.
 - 2026-10-25: Amended: the stock board is redesigned (one section per phone with stock first, in-stock stores with Today/Tomorrow and distance, one Buy per phone, the rest collapsed, freshness always visible, a down banner over stale stock), per `## UI direction` and `mockups/stock-board.html`. Why: change 9 (user, 2026-10-25).
 - 2026-10-25: Amended: the stock board's freshness age counts from `lastSuccessAt`, not `lastCheckAt`, matching spec.md:69 and the built board. Why: change 10 (review finding on T22, user, 2026-10-25).
+- 2026-10-25: Amended: refusal backoff in the scheduler (2, 5, then 10 minutes, cleared by a success or a newer token), a `network-limited` cause when a fresh pair is refused too, and down messages that say checks are slowed. Why: change 12 (user, 2026-10-25). Principle: principle-smallest-change
+- 2026-10-25: Amended: token-auto watches `GET /api/state` every minute and renews at once when the token is reported rejected, at most once every 10 minutes. Why: changes 11 and 12 (user, 2026-10-25).
