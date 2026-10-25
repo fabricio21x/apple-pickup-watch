@@ -98,14 +98,14 @@
 - Source: a finding while investigating an outage (the owner reported "monitoring is not working now")
 - Words: From about 20:34Z on 2026-10-25 every check failed with Apple's 541 (health down, cause token-rejected, 29 failures by 20:56Z), although the stored pair, posted by token:auto at 19:47:57Z, didn't expire until 21:47:52Z. token:auto kept posting the same pair every 10 minutes ("stored=false") because it only renews by expiry (scripts/token-auto.ts `needsRefresh`, 20 minutes before expiry), so an early rejection would have left monitoring down until 21:27Z with no attempt to recover. In this incident a fresh pair from the same profile, and even a fresh session after clearing every apple.com cookie, were also rejected (541) while the buy page answered 200, so Apple was refusing this setup's stock checks; renewing alone wouldn't have fixed it, but the gap stands. The owner asked to record it (2026-10-25).
 - Level: design (design.md decisions 13 and 21: token:auto refreshes before each expiry; it should also renew when the server reports the token rejected)
-- Status: open
-- Outcome: pending; not built until the owner asks
+- Status: planned
+- Outcome: folded into C12 at the owner's choice (2026-10-25): spec Token acquisition line and acceptance criterion, design decision 13; spec and design approved by the owner ("Yes, push and spec+design approved"); task T24.
 
 ## C12: Apple blocked the home network's stock checks
 - Date: 2026-10-25
 - Source: user, after the 2026-10-25 outage (C11)
 - Words: yes, indeed I thikn my ip was blocked. When I switched to cellular data it worked but with myu network I was blocked, we need to fix this.
 - Evidence: from about 20:34Z every `fulfillment-messages` request from the Mac answered 541, with the stored pair, a freshly renewed pair and a brand-new session alike, while the buy page answered 200; the owner's own browser was blocked on the home network and worked on cellular. The interval had been 45 s that day (the spec's default is 60 s ±15 s, spec.md:24, :54). The monitor reported the cause as "token-rejected", because it can't tell a rejected token from a blocked network (both are 541).
-- Level: to be sized
-- Status: open
-- Outcome: pending
+- Level: scope (spec.md Poller, Token acquisition and Health lines, acceptance criteria 54 and 65 plus two new ones; design decisions 7, 8, 9, 13)
+- Status: planned
+- Outcome: the owner chose to handle blocks in the monitor instead of rerouting traffic once the block proved temporary, set the interval back to 60 s, and folded C11 in; spec and design amended and approved by the owner ("Yes, push and spec+design approved", 2026-10-25); task T24.
