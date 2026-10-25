@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock board mockup</title>
+<style>
+  :root {
+    --bg: oklch(0.982 0.004 85);
+    --surface: oklch(0.996 0.002 85);
+    --rail: oklch(0.965 0.006 80);
+    --ink: oklch(0.22 0.012 70);
+    --ink-2: oklch(0.42 0.01 70);
+    --muted: oklch(0.54 0.01 70);
+    --line: oklch(0.905 0.007 80);
+    --line-soft: oklch(0.94 0.005 80);
+    --today: oklch(0.47 0.13 150);
+    --today-bg: oklch(0.95 0.045 150);
+    --tomorrow: oklch(0.47 0.1 65);
+    --tomorrow-bg: oklch(0.95 0.055 85);
+    --other-bg: oklch(0.95 0.01 260);
+    --danger: oklch(0.52 0.19 27);
+    --danger-bg: oklch(0.96 0.03 27);
+    --focus: oklch(0.55 0.15 250);
+    --sw-black: oklch(0.26 0.006 260);
+    --sw-silver: oklch(0.87 0.006 250);
+    --sw-glacier: oklch(0.84 0.045 220);
+    --sw-burgundy: oklch(0.42 0.12 15);
+    --sw-nightsky: oklch(0.32 0.05 268);
+    --sw-starwhite: oklch(0.955 0.012 90);
+    --radius: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+
+  /* Mockup-only state switcher */
+  .switcher { position: sticky; top: 0; z-index: 30; display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; background: oklch(0.3 0.01 260); scrollbar-width: none; }
+  .switcher button { flex: none; font: 600 12px/1 system-ui; color: oklch(0.85 0.01 260); background: transparent; border: 1px solid oklch(0.45 0.01 260); border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  .switcher button[aria-pressed="true"] { background: oklch(0.96 0.005 260); color: oklch(0.25 0.01 260); border-color: transparent; }
+
+  /* App shell (unchanged context) */
+  .shell { display: grid; grid-template-columns: 1fr; min-height: 100vh; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line-soft); background: var(--surface); }
+  .topbar h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+  .sidebar { display: none; }
+  .tabs { position: fixed; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); z-index: 20; }
+  .tabs a { display: grid; justify-items: center; gap: 2px; padding: 8px 0 10px; font-size: 11px; font-weight: 500; color: var(--muted); text-decoration: none; }
+  .tabs a[aria-current] { color: var(--ink); font-weight: 650; }
+  .tabs svg, .sidebar svg { width: 22px; height: 22px; }
+
+  main { padding: 0 16px 104px; }
+  .board { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; }
+  .rail { display: contents; }
+  .banner { order: 0; } .status { order: 1; } .note { order: 2; } .primary { order: 3; } .quiet { order: 4; }
+
+  /* Status strip */
+  .status { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center; padding: 14px 0 10px; font-size: 13px; color: var(--muted); }
+  .status .sub { grid-column: 2; }
+  .status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--today); box-shadow: 0 0 0 3px var(--today-bg); flex: none; }
+  .status strong { color: var(--ink-2); font-weight: 600; }
+  .status .sep { color: var(--line); }
+  .banner { margin: 12px 0 4px; padding: 12px 14px; border: 1px solid oklch(0.85 0.06 27); background: var(--danger-bg); border-radius: var(--radius); color: var(--danger); font-size: 14px; line-height: 1.4; }
+  .banner b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .banner a { font-weight: 650; }
+  .note { margin: 4px 0 8px; font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+  .note a { font-weight: 600; }
+
+  /* Phone sections */
+  .phone { padding: 20px 0 22px; border-top: 1px solid var(--line); }
+  .phone:first-of-type { border-top: 0; }
+  .phone-head { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: start; }
+  .swatch { width: 22px; height: 22px; border-radius: 50%; margin-top: 2px; box-shadow: inset 0 0 0 1px oklch(0.2 0.01 70 / 0.18); }
+  .phone-title { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.2; }
+  .phone-meta { margin: 2px 0 0; font-size: 14px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+  .tag { white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--ink-2); background: var(--other-bg); border-radius: 6px; padding: 2px 7px; }
+  .count { grid-column: 2 / -1; margin: 6px 0 0; font-size: 14px; font-weight: 600; color: var(--today); }
+  .buy-desktop { display: none; }
+  .buy { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 18px; border-radius: 12px; background: var(--ink); color: oklch(0.985 0.003 85); font-size: 16px; font-weight: 650; text-decoration: none; transition: background-color 180ms cubic-bezier(0.25, 1, 0.5, 1); }
+  .buy:hover { background: oklch(0.32 0.012 70); }
+  .buy svg { width: 16px; height: 16px; }
+  .buy-mobile { display: flex; width: 100%; margin-top: 14px; }
+  .buy.buy-desktop { display: none; }
+
+  .stores { list-style: none; margin: 14px 0 0; padding: 0; border-top: 1px solid var(--line-soft); }
+  .stores li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; min-height: 52px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+  .store { font-size: 17px; font-weight: 500; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
+  .dist { font-size: 15px; color: var(--muted); }
+  .pill { font-size: 13px; font-weight: 650; border-radius: 999px; padding: 4px 10px; min-width: 84px; text-align: center; }
+  .pill.today { color: var(--today); background: var(--today-bg); }
+  .pill.tomorrow { color: var(--tomorrow); background: var(--tomorrow-bg); }
+  .pill.other { color: oklch(0.42 0.08 250); background: oklch(0.95 0.025 250); }
+  .pill.unchecked { color: var(--muted); background: var(--line-soft); }
+  .pill.none { color: var(--muted); background: transparent; padding-right: 0; min-width: 0; font-weight: 500; }
+
+  details.rest { margin-top: 10px; }
+  details.rest summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: 14px; color: var(--muted); }
+  details.rest summary::-webkit-details-marker { display: none; }
+  details.rest summary svg { width: 14px; height: 14px; transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1); }
+  details.rest[open] summary svg { transform: rotate(90deg); }
+  details.rest .stores li { min-height: 40px; }
+  details.rest .store { font-size: 15px; color: var(--ink-2); font-weight: 400; }
+
+  /* Phones with nothing nearby */
+  .quiet { margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .quiet h2 { margin: 0 0 6px; font-size: 13px; font-weight: 650; color: var(--muted); letter-spacing: 0.02em; text-transform: uppercase; }
+  .quiet ul { list-style: none; margin: 0; padding: 0; }
+  .quiet li { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+  .quiet .swatch { width: 14px; height: 14px; margin: 0; }
+  .quiet .name { font-size: 15px; font-weight: 550; }
+  .quiet .why { grid-column: 2; font-size: 13px; color: var(--muted); }
+
+  /* Empty, first run, loading */
+  .empty { padding: 36px 0 12px; }
+  .empty h2 { margin: 0 0 6px; font-size: 21px; font-weight: 650; letter-spacing: -0.015em; }
+  .empty p { margin: 0 0 14px; font-size: 15px; color: var(--ink-2); line-height: 1.45; max-width: 46ch; }
+  .steps { list-style: none; margin: 18px 0 0; padding: 0; counter-reset: s; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line-soft); font-size: 15px; }
+  .steps li::before { content: counter(s); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 650; background: var(--rail); color: var(--ink-2); }
+  .steps li.done::before { content: "✓"; background: var(--today-bg); color: var(--today); }
+  .steps a { font-weight: 600; }
+  .sk { background: linear-gradient(90deg, var(--line-soft), var(--rail), var(--line-soft)); background-size: 200% 100%; border-radius: 6px; animation: sk 1.4s ease-in-out infinite; }
+  @keyframes sk { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .sk { animation: none; } * { transition: none !important; } }
+  .stale { opacity: 0.55; }
+
+  /* Desktop */
+  @media (min-width: 768px) {
+    .shell { grid-template-columns: 224px 1fr; }
+    .topbar, .tabs { display: none; }
+    .sidebar { display: flex; flex-direction: column; gap: 4px; padding: 20px 14px; background: var(--rail); border-right: 1px solid var(--line-soft); min-height: 100vh; position: sticky; top: 0; }
+    .sidebar h1 { margin: 0 8px 14px; font-size: 17px; font-weight: 650; }
+    .sidebar a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--ink-2); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .sidebar a[aria-current] { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: 0 1px 0 var(--line); }
+    .sidebar svg { width: 18px; height: 18px; }
+    main { padding: 28px 32px 48px; }
+    .buy.buy-mobile { display: none; }
+    .buy.buy-desktop { display: inline-flex; }
+  }
+  @media (min-width: 1100px) {
+    .board { max-width: 1060px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; align-items: start; }
+    .rail { display: block; position: sticky; top: 28px; order: 2; }
+    .rail .status { padding: 16px; background: var(--rail); border-radius: var(--radius); }
+    .rail .status .dotsep { display: none; }
+    .rail .status .ago { display: block; }
+    .rail .status .ago::first-letter { text-transform: uppercase; }
+    .rail .quiet { margin-top: 20px; border-top: 0; padding-top: 0; }
+    .primary { order: 1; }
+    .phone:first-child { padding-top: 4px; }
+    .board > .banner { grid-column: 1 / -1; margin: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="switcher" role="toolbar" aria-label="Mockup state">
+  <button data-state="stock" aria-pressed="true">In stock</button>
+  <button data-state="none">Nothing nearby</button>
+  <button data-state="first">First run</button>
+  <button data-state="loading">Loading</button>
+  <button data-state="down">Monitoring down</button>
+  <button data-state="edge">Not checked + over cap</button>
+</div>
+
+<div class="shell">
+  <aside class="sidebar" aria-label="Pickup watch">
+    <h1>Pickup watch</h1>
+    <nav aria-label="Views">
+      <a href="#" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7l8-4 8 4v10l-8 4-8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>Stock</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Watches</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6"/></svg>Stores</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>Settings</a>
+    </nav>
+  </aside>
+
+  <div>
+    <header class="topbar"><h1>Pickup watch</h1></header>
+    <main><div class="board" id="board"></div></main>
+  </div>
+</div>
+
+<nav class="tabs" aria-label="Views">
+  <a href="#" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7l8-4 8 4v10l-8 4-8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>Stock</a>
+  <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Watches</a>
+  <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6"/></svg>Stores</a>
+  <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</a>
+</nav>
+
+<script>
+const STORES = {
+  R752: ['Miami Worldcenter', 2.7], R623: ['Brickell City Centre', 2.9], R115: ['Lincoln Road', 6.0], R312: ['Dadeland', 8.1],
+  R012: ['The Falls', 11.6], R087: ['Aventura', 13.4], R214: ['The Galleria', 25.5], R074: ['Boca Raton', 40.7],
+  R024: ['Wellington Green', 59.7], R127: ['The Gardens Mall', 74.2], R169: ['Waterside Shops', 101.7], R185: ['Coconut Point', 106.5],
+}
+const ALL = Object.keys(STORES)
+const icon = {
+  arrow: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 11L11 5M6 5h5v5"/></svg>',
+  chev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg>',
+}
+const phones = {
+  stock: [
+    { model: 'iPhone 18 Pro Max', cap: '256GB', color: 'Black', sw: 'black', role: 'watched',
+      stores: { R623: 'Today', R012: 'Today', R087: 'Today', R185: 'Today', R115: 'Tomorrow' } },
+    { model: 'iPhone Duo', cap: '256GB', color: 'Star White', sw: 'starwhite', role: 'other', relates: 'Night Sky',
+      stores: { R312: 'Tomorrow' } },
+    { model: 'iPhone Duo', cap: '256GB', color: 'Night Sky', sw: 'nightsky', role: 'watched', stores: {} },
+  ],
+}
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+const rank = (l) => (l === 'Today' ? 0 : l === 'Tomorrow' ? 1 : l === 'Not checked' ? 3 : 2)
+
+function storeRow(id, label, cls) {
+  const [name, mi] = STORES[id]
+  return `<li><span class="store">${esc(name)}</span><span class="dist num">${mi.toFixed(1)} mi</span><span class="pill ${cls}">${esc(label)}</span></li>`
+}
+
+function phoneSection(p) {
+  const inStock = Object.entries(p.stores).filter(([, l]) => l !== 'Not checked')
+  const unchecked = Object.entries(p.stores).filter(([, l]) => l === 'Not checked')
+  const rest = ALL.filter((id) => !(id in p.stores))
+  inStock.sort((a, b) => rank(a[1]) - rank(b[1]) || STORES[a[0]][1] - STORES[b[0]][1])
+  const pillClass = (l) => (l === 'Today' ? 'today' : l === 'Tomorrow' ? 'tomorrow' : 'other')
+  const today = inStock.filter(([, l]) => l === 'Today').length
+  const title = `${p.model} ${p.cap} ${p.color}`
+  const count = `In stock at ${inStock.length} ${inStock.length === 1 ? 'store' : 'stores'}${today ? `, ${today} for pickup today` : ''}`
+  const buy = (cls) => `<a class="buy ${cls}" href="#" aria-label="Buy ${esc(title)} on apple.com (opens a new tab)">Buy ${esc(p.color)} ${icon.arrow}</a>`
+  return `<section class="phone" aria-label="${esc(title)}">
+    <div class="phone-head">
+      <span class="swatch" style="background: var(--sw-${p.sw})" aria-hidden="true"></span>
+      <div>
+        <h2 class="phone-title">${esc(p.model)}</h2>
+        <p class="phone-meta"><span>${esc(p.cap)} · ${esc(p.color)}</span>${p.role === 'other' ? `<span class="tag">Other color</span><span>you watch ${esc(p.relates)}</span>` : ''}</p>
+      </div>
+      ${buy('buy-desktop')}
+      <p class="count">${count}</p>
+    </div>
+    <ul class="stores">${inStock.map(([id, l]) => storeRow(id, l, pillClass(l))).join('')}${unchecked.map(([id]) => storeRow(id, 'Not checked', 'unchecked')).join('')}</ul>
+    ${buy('buy-mobile')}
+    ${rest.length ? `<details class="rest"><summary>${icon.chev}Not at ${rest.length} other ${rest.length === 1 ? 'store' : 'stores'}</summary>
+      <ul class="stores">${rest.map((id) => storeRow(id, 'Unavailable', 'none')).join('')}</ul></details>` : ''}
+  </section>`
+}
+
+function quietList(list) {
+  if (!list.length) return ''
+  return `<section class="quiet" aria-label="Not in stock nearby"><h2>Not in stock nearby</h2><ul>${list.map((p) => `
+    <li><span class="swatch" style="background: var(--sw-${p.sw})" aria-hidden="true"></span><span class="name">${esc(p.model)} ${esc(p.cap)} · ${esc(p.color)}</span>
+    <span class="why">${p.why ?? '12 stores checked'}</span></li>`).join('')}</ul></section>`
+}
+
+function status({ ok = true, ago = '14 s ago', token = '1 h 50 min left' } = {}) {
+  return `<div class="status" role="status"><span class="dot" aria-hidden="true" style="${ok ? '' : 'background: var(--danger); box-shadow: 0 0 0 3px var(--danger-bg)'}"></span>
+    <span><strong>${ok ? 'Checking every minute' : 'Not checking'}</strong><span class="dotsep"> · </span><span class="ago num">last check ${ago}</span></span>
+    <span class="sub num">Token ${token}</span></div>`
+}
+
+const render = {
+  stock() {
+    const ps = phones.stock
+    const hot = ps.filter((p) => Object.keys(p.stores).length)
+    const cold = ps.filter((p) => !Object.keys(p.stores).length)
+    return `<div class="rail">${status()}${quietList(cold)}</div><div class="primary">${hot.map(phoneSection).join('')}</div>`
+  },
+  none() {
+    const cold = phones.stock.map((p) => ({ ...p }))
+    return `<div class="rail">${status({ ago: '6 s ago' })}</div><div class="primary">
+      <div class="empty"><h2>Nothing nearby yet</h2><p>None of your 3 phones is in stock at your 12 stores. The monitor checks every minute and Telegram alerts you the moment one appears.</p></div>
+      ${quietList(cold)}</div>`
+  },
+  first() {
+    return `<div class="primary"><div class="empty"><h2>Set up your watch</h2>
+      <p>Pick the iPhones you want and the stores you can reach. The board then shows where each one can be picked up.</p>
+      <ol class="steps"><li class="done"><span>Telegram is connected</span></li>
+      <li><span><a href="#">Choose your zip code</a> in Stores to list nearby Apple Stores</span></li>
+      <li><span><a href="#">Pick the iPhones to watch</a> in Watches</span></li>
+      <li><span><a href="#">Paste a token</a> in Settings, or run <code>npm run token:auto</code></span></li></ol></div></div>`
+  },
+  loading() {
+    const row = '<li><span class="sk" style="height:16px;width:62%"></span><span class="sk" style="height:14px;width:48px"></span><span class="sk" style="height:24px;width:84px;border-radius:999px"></span></li>'
+    return `<div class="rail"><div class="status"><span class="sk" style="height:14px;width:220px"></span></div></div><div class="primary">
+      <section class="phone" aria-busy="true" aria-label="Loading"><div class="phone-head"><span class="sk" style="width:22px;height:22px;border-radius:50%"></span>
+      <div><div class="sk" style="height:20px;width:180px;margin-bottom:6px"></div><div class="sk" style="height:14px;width:120px"></div></div></div>
+      <ul class="stores">${row.repeat(4)}</ul></section></div>`
+  },
+  down() {
+    const hot = phones.stock.filter((p) => Object.keys(p.stores).length)
+    return `<div class="banner" role="alert"><b>Monitoring is down</b>Apple rejected the token, so stock is not being checked. What you see below is from 2:14 PM and may be gone. <a href="#">Paste a new token in Settings</a> or start <code>npm run token:auto</code>.</div>
+      <div class="rail">${status({ ok: false, ago: '11 min ago', token: 'rejected' })}</div>
+      <div class="primary stale" aria-describedby="stale-note"><p class="note" id="stale-note">Last known stock, 2:14 PM</p>${hot.map(phoneSection).join('')}</div>`
+  },
+  edge() {
+    const p = { ...phones.stock[0], stores: { R623: 'Today', R087: 'Today', R012: 'Not checked' } }
+    const cold = [
+      { model: 'iPhone Duo', cap: '256GB', color: 'Night Sky', sw: 'nightsky' },
+      { model: 'iPhone 18 Pro Max', cap: '512GB', color: 'Glacier', sw: 'glacier', why: 'Not checked: over the 20-part cap' },
+      { model: 'iPhone 18 Pro Max', cap: '512GB', color: 'Burgundy', sw: 'burgundy', why: 'Not checked: over the 20-part cap' },
+    ]
+    return `<div class="rail">${status({ ago: '9 s ago' })}<p class="note">22 parts tracked, 20 checked. <a href="#">Trim your watches</a> to check them all.</p>${quietList(cold)}</div>
+      <div class="primary">${phoneSection(p)}</div>`
+  },
+}
+
+const board = document.getElementById('board')
+function show(state) {
+  board.innerHTML = render[state]()
+  document.querySelectorAll('.switcher button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.state === state)))
+  history.replaceState(null, '', `#${state}`)
+}
+document.querySelectorAll('.switcher button').forEach((b) => b.addEventListener('click', () => show(b.dataset.state)))
+const fromHash = () => show(render[location.hash.slice(1)] ? location.hash.slice(1) : 'stock')
+window.addEventListener('hashchange', fromHash)
+fromHash()
+</script>
+</body>
+</html>

@@ -78,13 +78,21 @@ export default function App() {
             <NavLink key={v} target={v} active={v === view} className="flex-row justify-start gap-3 rounded-md px-3 py-2 text-sm" />
           ))}
         </nav>
-        {state && <StatusChips state={state} className="flex-col items-start" />}
+        {state && view !== 'stock' && <StatusChips state={state} className="flex-col items-start" />}
       </aside>
       <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-background px-4 py-2 md:hidden">
         <h1 className="text-lg font-semibold">Pickup watch</h1>
-        {state && <StatusChips state={state} className="justify-end" />}
+        {state && view !== 'stock' && <StatusChips state={state} className="justify-end" />}
       </header>
-      <main className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 pb-24 md:pb-4">
+      {/* 68.75rem is 1100px; an arbitrary px breakpoint would sort before md: and lose */}
+      <main
+        className={cn(
+          'mx-auto flex w-full flex-col gap-4 p-4 pb-24 md:pb-4',
+          view === 'stock'
+            ? 'max-w-[752px] md:max-w-[784px] md:px-8 md:pt-7 md:pb-12 min-[68.75rem]:max-w-[1124px]'
+            : 'max-w-2xl',
+        )}
+      >
         {offline && (
           <p role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">
             Cannot reach the monitor. Retrying every {POLL_MS / 1000} s.
@@ -95,15 +103,15 @@ export default function App() {
             {message}
           </p>
         )}
+        {view === 'stock' && (state || !offline) && <StockBoard state={state} />}
         {state ? (
           <>
-            {view === 'stock' && <StockBoard state={state} />}
             {view === 'watches' && <Watches state={state} act={act} />}
             {view === 'stores' && <Stores state={state} act={act} />}
             {view === 'settings' && <Settings state={state} act={act} />}
           </>
         ) : (
-          !offline && <p className="text-sm text-muted-foreground">Loading…</p>
+          view !== 'stock' && !offline && <p className="text-sm text-muted-foreground">Loading…</p>
         )}
       </main>
       <nav

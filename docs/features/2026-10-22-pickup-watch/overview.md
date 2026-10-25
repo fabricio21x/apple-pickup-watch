@@ -25,6 +25,9 @@ graph LR
 
 One Node process serves the page and the API and runs the monitor loop. Each cycle, the monitor works out which (configuration, store) pairs are tracked. It asks Apple about all of them in one request, using the token pair a browser-side source keeps fresh, and compares the answer with what the owner was last told. It groups the changes by model and storage and sends one HTML message per group. The catalog and the store list come from Apple routes that need no token. launchd restarts the process if it dies.
 
+## Stock board (redesign, change 9)
+The home view now answers "where can I pick up my phone right now". A freshness line sits on top ("Checking every minute · last check 14 s ago"). Below it, one section per phone, phones with stock first: its finish-color dot, the stores that have it with Today or Tomorrow and distance, and one Buy button. The stores without stock collapse into one line, and phones with nothing nearby sit quietly at the end. When monitoring is down, a red banner explains the fix and the last known stock fades beneath it. Light, warm and restrained: green only for Today, amber only for Tomorrow, after the Apple Store app and Flighty. Mockup with every state: `mockups/stock-board.html`.
+
 ## Approach and why
 We store only "which pairs the owner was told are in stock" and compare each check against it, all in one process with a JSON catalog. Messages are built per model and storage from that comparison, and a message's pairs are saved only once Telegram accepts it.
 - Observation log instead of the alerted set: lost, because it needs history and pruning no criterion asks for, and failed sends have no natural retry.
