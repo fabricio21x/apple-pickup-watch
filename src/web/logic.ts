@@ -42,7 +42,7 @@ export type Phone = {
   why: string
 }
 
-export const isInStock = (badge: GridCell['badge']) => badge !== 'Unavailable' && badge !== 'Not checked'
+const isInStock = (badge: GridCell['badge']) => badge !== 'Unavailable' && badge !== 'Not checked'
 
 const FINISHES: Record<string, string> = {
   black: 'var(--sw-black)',
