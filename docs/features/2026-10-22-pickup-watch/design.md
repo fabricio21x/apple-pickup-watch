@@ -183,7 +183,7 @@ The first version of this design was written before any code existed, so the row
     Why: spec.md:63.
 18. **UI:** four views in one page, polling `GET /api/state` every 5 s as today. The view lives in `location.hash` (`#/stock`, `#/watches`, `#/stores`, `#/settings`; anything else is `#/stock`), read on load and on `hashchange`, so refresh and back work with no router library.
     - Shell: at `md` (768 px) and wider, a fixed sidebar with the four views plus health and token status chips; below `md`, a top bar with the chips and a fixed bottom tab bar with four icon-and-label tabs. The active view is marked, and only that view renders.
-    - **Stock board** (home): last successful check and health at the top, then one block per model + storage of the tracked parts, one row per color × enabled store with its Today / Tomorrow / Unavailable / Not checked badge and distance, in-stock rows first, "Other color" rows marked. In-stock store names link to the buy URL.
+    - **Stock board** (home): redesigned by change 9; its layout, states and look are in `## UI direction` below and in `mockups/stock-board.html`.
     - **Watches:** the Model → Storage → Color picker, "N / 20 parts tracked", and one compact row per watch with its other-colors switch and remove; the per-store badges move to the stock board.
     - **Stores:** zip form and store switches with distance.
     - **Settings:** Telegram status and test, token status and time left with the paste-cURL dialog, interval, Wi-Fi toggle with the LAN URL.
@@ -216,6 +216,48 @@ The first version of this design was written before any code existed, so the row
     - Other messages: `🚨 <b>Monitoring is down</b>`, `✅ <b>Back up</b>`, `⏳ <b>Token expiring</b>`, `▶️ <b>Monitor started</b>`, `🧪 <b>Test message</b>`, each with the current text as the body.
     - The worst case (4 colors × 12 stores, the longest store names) stays under Telegram's 4096-character limit, and a test asserts it.
     - Why: spec.md:29, 34, 63, and Apple text must never be read as markup.
+
+## UI direction
+
+Covers the stock board only (change 9, 2026-10-25); the other views keep decision 18. Project context: `PRODUCT.md` (register product; users, principles, anti-references). Brief from impeccable `shape`, approved by the owner on 2026-10-25.
+
+**Feature summary.** The stock board is the home view the owner opens on their phone right after a Telegram stock alert. It answers "where can I pick up my phone right now" and gets them to Apple's buy page in one tap, while showing that the monitor is alive.
+
+**Primary user action.** See which stores have the watched phone (Today first, nearest first) and tap Buy.
+
+**Design direction.** Restrained: warm tinted neutrals; green only for Today and amber only for Tomorrow; a small dot in each phone's real finish color (Black, Silver, Glacier, Burgundy, Night Sky, Star White), the only other color. Scene: the owner on their phone, often outdoors or on the move in daylight, seconds after a ping, deciding where to go, so a light, high-contrast theme. References: the Apple Store app (finish swatches, system type, the pickup panel's plain language) and Flighty (one clear state per item, freshness always visible, dense but calm). Anti-references: the first board's flat list (color repeated per row, grey badges, equal weight, long scroll) and Apple's marketing pages. No visual probes: this harness has no native image generation; the HTML mockup served instead.
+
+**Scope.** High-fidelity static mockup of one screen, all key states; build is a separate step after approval.
+
+**Layout strategy.**
+- A status strip first: "Checking every minute · last check 14 s ago" and "Token 1 h 50 min left". When monitoring is down it becomes a full-width red banner with the cause and the fix, and the last known stock below fades with "Last known stock, <time>".
+- One section per phone (model, then storage · color), phones with stock first. Each shows its finish dot, an "Other color" tag with "you watch <color>" when it is a sibling, and a green count line ("In stock at 5 stores, 4 for pickup today").
+- Under it, the in-stock stores, one row each: store name, distance (tabular), a Today or Tomorrow pill; Today first, then by distance; a store missing from Apple's reply shows a grey "Not checked" pill.
+- One Buy button per phone ("Buy Black", arrow, opens a new tab), full width under the list on the phone and beside the title on wide screens.
+- The stores without stock collapse into one quiet line, "Not at 7 other stores", that expands inline.
+- Phones with no stock anywhere sit together at the end under "Not in stock nearby", one compact line each ("12 stores checked", or "Not checked: over the 20-part cap").
+- No cards: sections are separated by space and hairlines.
+
+**Key states** (all in the mockup's switcher):
+- In stock: as above.
+- Nothing nearby: "Nothing nearby yet" with how many phones and stores are watched and that Telegram will alert; then the quiet list.
+- First run (no watches, stores or token): "Set up your watch" with numbered steps linking to Stores, Watches and Settings; done steps get a check.
+- Loading (no state yet): skeleton rows, no spinner.
+- Monitoring down or token rejected or expired: the red banner with the fix; stale stock faded with its time.
+- Not checked and over cap: grey "Not checked" pill on a store; a note "22 parts tracked, 20 checked. Trim your watches to check them all." and the unchecked phones in the quiet list.
+
+**Interaction model.** Buy opens Apple's unlocked page in a new tab. "Not at N other stores" is a native disclosure (`details`/`summary`) that expands inline. The board keeps polling `GET /api/state` every 5 s; the "last check" age ticks every second on the client. Motion only for state: a 200 ms fade on changed rows and the disclosure chevron turn, ease-out; none under `prefers-reduced-motion`.
+
+**Content requirements.** Copy as in the mockup: "Checking every minute", "Not checking", "last check <age>", "Token <time> left" or "Token rejected" / "expired" / "missing", "In stock at N stores, M for pickup today", "Buy <color>", "Not at N other stores", "Not in stock nearby", "Nothing nearby yet", "Set up your watch", "Monitoring is down", "Last known stock, <time>". Counts go up to 20 phones and 12 stores; store names up to about 25 characters; no em dashes.
+
+**Recommended references** (impeccable): product.md, layout.md, typeset.md, clarify.md, harden.md.
+
+**Data.** Nothing new from the server: phones and their store rows come from `watches[].cells` (a cell whose part differs from its watch's is the "Other color" of that watch's color), stores from `stores`, freshness from `lastCheckAt` and `intervalSec`, health from `health`, token from `token`, the stale time from `lastSuccessAt`, the cap note from `partsCount`. The finish color per color name is a small table in `src/web/logic.ts`.
+
+- **Mockups:** `mockups/stock-board.html` (open it and use the state switcher at the top; `#stock`, `#none`, `#first`, `#loading`, `#down`, `#edge`).
+- **Layout:** 375 px: one column in this order: status (or banner), notes, phones with stock, the quiet list; Buy full width under each list; app top bar and bottom tabs as today. 768 px and up: the app sidebar as today; Buy moves beside the title. 1100 px and up: a reading column (max 720 px) for the phones with stock and a 280 px sticky side rail with the status block and the quiet list; the down banner spans both columns.
+- **Components:** shadcn `Button` restyled as the Buy button; `Badge` for the Today, Tomorrow and Not checked pills and the Other color tag; native `details`/`summary` for the collapse; no `Card`. New design tokens in `src/web/index.css`: warm neutrals in OKLCH, `--today`/`--today-bg`, `--tomorrow`/`--tomorrow-bg`, and the finish swatch colors. System font stack with tabular numbers for distances and times.
+- **Accessibility:** availability always in words; each phone is a labelled `section`; Buy buttons carry an `aria-label` naming the phone and that it opens apple.com in a new tab; the status strip is `role="status"`, the down banner `role="alert"`; tap targets at least 44 px; visible focus ring; WCAG AA contrast for pills and muted text on the warm background.
 
 ## Data shapes
 
@@ -640,3 +682,5 @@ Stale: after the review, the owner chose open Wi-Fi access over security-1's LAN
 - 2026-10-23: Amended: Today/Tomorrow match in any case, and any other label gets its own message line. Why: a store with Apple's own quote must not be left out of a message that sounds (gulag: pessimist-4).
 - 2026-10-23: Amended: the commit compares role as well as membership, and re-posting a watched part is a no-op. Why: a new watch must still get its watched alert, and a double submit must not re-alert (gulag: pessimist-5, pessimist-6).
 - 2026-10-23: Amended: one inline URL buy button per in-stock color, with store names as plain text and no URL in the message text. Why: every store link would open the same page; the owner chose buttons (user, 2026-10-23; gulag: staff-engineer-2).
+- 2026-10-25: UI brief approved. Why: user, 2026-10-25.
+- 2026-10-25: Amended: the stock board is redesigned (one section per phone with stock first, in-stock stores with Today/Tomorrow and distance, one Buy per phone, the rest collapsed, freshness always visible, a down banner over stale stock), per `## UI direction` and `mockups/stock-board.html`. Why: change 9 (user, 2026-10-25).
