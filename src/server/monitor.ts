@@ -41,7 +41,6 @@ const REFUSALS = new Set<FailureCause>(['token-rejected', 'token-expired', 'netw
 type TokenOutcome = Extract<TokenStatus, 'working' | 'rejected' | 'expired'>
 const TOKEN_FAILURE: Partial<Record<FailureCause, TokenOutcome>> = {
   'token-rejected': 'rejected',
-  'network-limited': 'rejected',
   'token-expired': 'expired',
 }
 const tokenKey = (token: AppleToken) => `${token.dssid2}|${token.shldBtCk}`
@@ -94,6 +93,7 @@ export function createMonitor(deps: {
   let running = false
   let inFlight = false
   let cycleStartedAt = 0
+  let tokenStoredInFlight = false
   let refusals = 0
   let backoffMs: number | null = null
   let firstRefusalExpiresAt: number | undefined
@@ -257,10 +257,15 @@ export function createMonitor(deps: {
       inFlight = true
       cycleStartedAt = now()
       backoffMs = null
+      tokenStoredInFlight = false
       state.nextStartAt = cycleStartedAt + jitterMs(db.getSettings().intervalSec, random)
       await runCheck({ deadline: state.nextStartAt })
     } finally {
       inFlight = false
+      if (tokenStoredInFlight) {
+        refusals = 0
+        backoffMs = null
+      }
       if (backoffMs !== null) state.nextStartAt = cycleStartedAt + backoffMs
       if (running) arm()
       else state.nextStartAt = null
@@ -297,6 +302,7 @@ export function createMonitor(deps: {
       const slowed = backoffMs !== null
       refusals = 0
       backoffMs = null
+      if (inFlight) tokenStoredInFlight = true
       if (!slowed || !running || inFlight) return
       clearTimeout(timer)
       state.nextStartAt = now() + jitterMs(db.getSettings().intervalSec, random)

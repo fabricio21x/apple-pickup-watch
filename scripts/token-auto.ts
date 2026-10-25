@@ -149,7 +149,7 @@ async function main(): Promise<void> {
   let nextCheckAt = 0
   let lastForcedAt: number | null = null
   for (;;) {
-    const forced = Date.now() < nextCheckAt && shouldRenewOnRejection(await readTokenStatus(), lastForcedAt, Date.now())
+    const forced = shouldRenewOnRejection(await readTokenStatus(), lastForcedAt, Date.now())
     if (forced || Date.now() >= nextCheckAt) {
       if (forced) lastForcedAt = Date.now()
       let delay = RETRY_MS

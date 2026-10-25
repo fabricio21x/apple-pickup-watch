@@ -996,7 +996,7 @@ describe('network-limited cause', () => {
     s.monitor.tokenStored()
 
     expect(await s.monitor.runCheck()).toEqual({ ok: false, cause: 'network-limited' })
-    expect(s.monitor.snapshot().token.status).toBe('rejected')
+    expect(s.monitor.snapshot().token.status).toBe('untested')
   })
 
   it('goes back to token-rejected for the first refusal of a run that starts after a success', async () => {
@@ -1470,6 +1470,40 @@ describe('scheduler', () => {
       s.monitor.stop()
 
       expect(s.startTimes.map((t) => (t - NOW) / SEC).slice(0, 3)).toEqual([0, 90, 210])
+    })
+
+    it('settles at 10 minutes apart when the fresh token is refused too and nothing renews it again', async () => {
+      const s = await schedulerSetup()
+      s.setStatus(541)
+
+      s.monitor.start()
+      let renewals = 0
+      for (let i = 0; i < 30; i++) {
+        await s.advance(MIN)
+        if (s.monitor.snapshot().token.status === 'rejected') {
+          renewals += 1
+          s.db.setToken({ ...TOKEN, shldBtCk: `id|${renewals + 1}|payload|sig`, expiresAt: NOW + 2000 * HOUR })
+          s.monitor.tokenStored()
+        }
+      }
+      s.monitor.stop()
+
+      expect(renewals).toBe(1)
+      expect(startMinutes(s)).toEqual([0, 2, 4, 9, 19, 29])
+    })
+
+    it('goes back to the set interval when a newer token is stored while a refused check is in flight', async () => {
+      const s = await schedulerSetup({ appleMs: 20 * SEC })
+      s.setStatus(541)
+
+      s.monitor.start()
+      await s.advance(5 * SEC)
+      s.db.setToken({ ...TOKEN, shldBtCk: 'id|2|payload|sig', expiresAt: NOW + 2000 * HOUR })
+      s.monitor.tokenStored()
+      await s.advance(100 * SEC)
+      s.monitor.stop()
+
+      expect(s.startTimes.map((t) => (t - NOW) / SEC).slice(0, 2)).toEqual([0, 60])
     })
 
     it('keeps the set interval after a network failure', async () => {
