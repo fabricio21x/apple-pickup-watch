@@ -92,3 +92,11 @@
   9. The app has no favicon, so every page load logs a 404 for `/favicon.ico`.
 - Status: done
 - Outcome: item 8 amended design.md's UI direction Data paragraph (freshness from `lastSuccessAt`) with a decision-log line, design approved automatically (wording only, no spec change); items 1-7 and 9 are task T23 in plan.md.
+
+## C11: token:auto doesn't replace a token Apple rejected early
+- Date: 2026-10-25
+- Source: a finding while investigating an outage (the owner reported "monitoring is not working now")
+- Words: From about 20:34Z on 2026-10-25 every check failed with Apple's 541 (health down, cause token-rejected, 29 failures by 20:56Z), although the stored pair, posted by token:auto at 19:47:57Z, didn't expire until 21:47:52Z. token:auto kept posting the same pair every 10 minutes ("stored=false") because it only renews by expiry (scripts/token-auto.ts `needsRefresh`, 20 minutes before expiry), so an early rejection would have left monitoring down until 21:27Z with no attempt to recover. In this incident a fresh pair from the same profile, and even a fresh session after clearing every apple.com cookie, were also rejected (541) while the buy page answered 200, so Apple was refusing this setup's stock checks; renewing alone wouldn't have fixed it, but the gap stands. The owner asked to record it (2026-10-25).
+- Level: design (design.md decisions 13 and 21: token:auto refreshes before each expiry; it should also renew when the server reports the token rejected)
+- Status: open
+- Outcome: pending; not built until the owner asks
