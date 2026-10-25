@@ -20,6 +20,8 @@ import {
 
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 const LINK = cn('font-semibold underline underline-offset-2 rounded-sm', FOCUS)
+const STALE_NOTE_ID = 'stale-note'
+const STALE = 'grayscale [&_a]:opacity-70'
 
 function useNow() {
   const [now, setNow] = useState(Date.now)
@@ -37,17 +39,22 @@ export function StockBoard({ state }: { state: StateDto | null }) {
   const banner = downBanner(state)
   const setup = setupSteps(state)
   const note = capNote(state.partsCount)
-  const staleSince = banner && inStock.length > 0 ? state.lastSuccessAt : null
-  const staleTime = staleSince === null ? null : formatClock(staleSince, Date.now())
+  const lastGood = banner && state.lastSuccessAt !== null ? formatClock(state.lastSuccessAt, Date.now()) : null
+  const staleTime = inStock.length > 0 ? lastGood : null
 
   return (
-    <div className={cn('flex flex-col', 'min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,1fr)_280px] min-[1100px]:items-start min-[1100px]:gap-x-10')}>
+    <div
+      className={cn(
+        'flex flex-col',
+        'min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,1fr)_280px] min-[1100px]:grid-rows-[auto_auto_auto_1fr] min-[1100px]:items-start min-[1100px]:gap-x-10',
+      )}
+    >
       {banner && (
         <div
           role="alert"
           className={cn(
-            'order-0 mt-3 mb-1 rounded-[10px] border border-destructive/30 bg-destructive-bg px-3.5 py-3 text-sm leading-snug text-destructive',
-            'min-[1100px]:col-span-full min-[1100px]:mt-0 min-[1100px]:mb-5',
+            'mt-3 mb-1 rounded-[10px] border border-destructive/30 bg-destructive-bg px-3.5 py-3 text-sm leading-snug text-destructive',
+            'min-[1100px]:col-span-full min-[1100px]:row-start-1 min-[1100px]:mt-0 min-[1100px]:mb-5',
           )}
         >
           <b className="mb-0.5 block text-[15px]">{banner.title}</b>
@@ -68,36 +75,39 @@ export function StockBoard({ state }: { state: StateDto | null }) {
         </div>
       )}
 
-      <div className={cn('order-3 min-w-0', 'min-[1100px]:order-1', staleTime && 'opacity-55')}>
+      <div className="min-[1100px]:col-start-2 min-[1100px]:row-start-2">
+        <Status state={state} />
+        {setup.complete && note && (
+          <p className="mt-1 mb-2 text-[13px] leading-snug text-ink-2 min-[1100px]:mt-3">
+            {note}{' '}
+            <a href="#/watches" className={LINK}>
+              Trim your watches
+            </a>{' '}
+            to check them all.
+          </p>
+        )}
+      </div>
+
+      <div className="min-w-0 min-[1100px]:col-start-1 min-[1100px]:row-span-3 min-[1100px]:row-start-2">
         {!setup.complete ? (
           <Setup steps={setup} />
         ) : inStock.length === 0 ? (
           !banner && <NothingNearby state={state} phones={quiet.length} />
         ) : (
           <>
-            {staleTime && <p className="mt-1 mb-2 text-[13px] text-ink-2">Last known stock, {staleTime}</p>}
+            {staleTime && (
+              <p id={STALE_NOTE_ID} className="mt-1 mb-2 text-[13px] text-ink-2">
+                Last known stock, {staleTime}
+              </p>
+            )}
             {inStock.map((p) => (
-              <PhoneSection key={p.part} phone={p} />
+              <PhoneSection key={p.part} phone={p} stale={staleTime !== null} />
             ))}
           </>
         )}
       </div>
 
-      {setup.complete && (
-        <div className={cn('contents', 'min-[1100px]:sticky min-[1100px]:top-7 min-[1100px]:order-2 min-[1100px]:block')}>
-          <Status state={state} />
-          {note && (
-            <p className="order-2 mt-1 mb-2 text-[13px] leading-snug text-ink-2 min-[1100px]:mt-3">
-              {note}{' '}
-              <a href="#/watches" className={LINK}>
-                Trim your watches
-              </a>{' '}
-              to check them all.
-            </p>
-          )}
-          {quiet.length > 0 && <QuietList phones={quiet} />}
-        </div>
-      )}
+      {setup.complete && quiet.length > 0 && <QuietList phones={quiet} asOf={lastGood} />}
     </div>
   )
 }
@@ -107,9 +117,8 @@ function Status({ state }: { state: StateDto }) {
   const { checking, headline, ago, token, trouble } = statusStrip(state, now)
   return (
     <div
-      role="status"
       className={cn(
-        'order-1 grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-0.5 py-3.5 text-[13px] text-muted-foreground',
+        'grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-0.5 py-3.5 text-[13px] text-muted-foreground',
         'min-[1100px]:rounded-[10px] min-[1100px]:bg-secondary min-[1100px]:p-4',
       )}
     >
@@ -121,26 +130,32 @@ function Status({ state }: { state: StateDto }) {
         )}
       />
       <span>
-        <strong className="font-semibold text-ink-2">{headline}</strong>
+        <strong role="status" className="font-semibold text-ink-2">
+          {headline}
+        </strong>
         <span aria-hidden className={cn('text-border', 'min-[1100px]:hidden')}>
           {' '}
           ·{' '}
         </span>
-        <span aria-live="off" className={cn('tabular-nums', 'min-[1100px]:block min-[1100px]:first-letter:uppercase')}>
-          {ago}
-        </span>
+        <span className={cn('tabular-nums', 'min-[1100px]:block min-[1100px]:first-letter:uppercase')}>{ago}</span>
       </span>
       <span className="col-start-2 tabular-nums">{token}</span>
-      {trouble && <span className="col-start-2 break-words text-destructive">{trouble}</span>}
+      <span role="status" className="col-start-2 break-words text-destructive empty:hidden">
+        {trouble}
+      </span>
     </div>
   )
 }
 
 function BuyButton({ phone, className }: { phone: Phone; className: string }) {
-  const title = `${phone.model} ${phone.capacity} ${phone.colorName}`
   return (
     <Button asChild className={cn('h-11 rounded-xl px-[18px] text-base font-semibold', className)}>
-      <a href={phone.buyUrl} target="_blank" rel="noreferrer" aria-label={`Buy ${title} on apple.com (opens a new tab)`}>
+      <a
+        href={phone.buyUrl}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`Buy ${phone.colorName}, ${phone.model} ${phone.capacity}, on apple.com (opens a new tab)`}
+      >
         Buy {phone.colorName}
         <ArrowUpRight aria-hidden />
       </a>
@@ -158,10 +173,14 @@ function Finish({ phone, className }: { phone: Pick<Phone, 'finish'>; className:
   )
 }
 
-function PhoneSection({ phone }: { phone: Phone }) {
+function PhoneSection({ phone, stale }: { phone: Phone; stale: boolean }) {
   const title = `${phone.model} ${phone.capacity} ${phone.colorName}`
   return (
-    <section aria-label={title} className="border-t border-border py-5 first:border-t-0 first:pt-3 min-[1100px]:first:pt-1">
+    <section
+      aria-label={title}
+      aria-describedby={stale ? STALE_NOTE_ID : undefined}
+      className={cn('border-t border-border py-5 first:border-t-0 first:pt-3 min-[1100px]:first:pt-1', stale && STALE)}
+    >
       <div className="grid grid-cols-[auto_1fr_auto] items-start gap-x-3 gap-y-1">
         <Finish phone={phone} className="mt-0.5 size-[22px]" />
         <div className="min-w-0">
@@ -252,13 +271,18 @@ function StoreRow({ stock: { store, badge }, quiet = false }: { stock: StoreStoc
   )
 }
 
-function QuietList({ phones }: { phones: Phone[] }) {
+function QuietList({ phones, asOf }: { phones: Phone[]; asOf: string | null }) {
   return (
     <section
       aria-label="Not in stock nearby"
-      className={cn('order-4 mt-2 border-t border-border pt-[18px]', 'min-[1100px]:mt-5 min-[1100px]:border-t-0 min-[1100px]:pt-0')}
+      className={cn(
+        'mt-2 border-t border-border pt-[18px]',
+        'min-[1100px]:col-start-2 min-[1100px]:row-start-3 min-[1100px]:mt-5 min-[1100px]:border-t-0 min-[1100px]:pt-0',
+        asOf && 'grayscale',
+      )}
     >
       <h2 className="mb-1.5 text-[13px] font-semibold tracking-wide text-muted-foreground uppercase">Not in stock nearby</h2>
+      {asOf && <p className="mb-1.5 text-[13px] text-ink-2">As of the last check, {asOf}</p>}
       <ul>
         {phones.map((p) => (
           <li key={p.part} className="grid grid-cols-[auto_1fr] items-center gap-x-2.5 border-b border-border-soft py-2.5">
@@ -370,7 +394,8 @@ const bone = 'animate-pulse rounded-md bg-border-soft motion-reduce:animate-none
 function Loading() {
   return (
     <div>
-      <div role="status" aria-label="Loading stock" className="py-3.5">
+      <div role="status" className="py-3.5">
+        <span className="sr-only">Loading stock…</span>
         <div className={cn(bone, 'h-3.5 w-56 max-w-full')} />
       </div>
       <section aria-busy className="py-5">
