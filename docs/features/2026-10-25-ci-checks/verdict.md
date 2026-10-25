@@ -1,20 +1,20 @@
 # Verdict: CI checks on pull requests
 
 - Feature: ci-checks
-- Tree: b9635e0a79e8922d7ac54eed1d89489054db9133
+- Tree: 4666542ee16c7200a6ba9e5f54766b651a1acdb9
 - Date: 2026-10-25
 
 ## Suite
-- `npm test`: `Tests  460 passed (460)` (10 files, including the new `test/ci.test.ts`).
-- `npm run typecheck` (`tsc`): exit 0, no errors.
+- Local `npm test`: `Tests  457 passed (457)` (9 files). `npm test -- no-such-file` exits 1 with "No test files found".
+- Local `npm run typecheck` (`tsc`): exit 0.
 - No failures; no baseline recorded.
 
 ## Criteria
-- [x] Every pull request runs `npm run typecheck` and `npm test` in GitHub Actions, failing if either fails — `test/ci.test.ts:9` "runs on every pull request" and `test/ci.test.ts:13` "runs the type check and the test suite" assert the workflow's trigger and steps; `test/ci.test.ts:18` "has a typecheck script that runs tsc". The live run on GitHub is confirmed on the PR itself.
+- [x] Every pull request runs `npm run typecheck` and `npm test` in GitHub Actions, failing if either fails — PR #2's `CI / check` run 40223329871 (`pull_request` event, head f0f506819cfe1e8c72b5d38e0bb21979bc2fcc18, tree 4666542): setup-node resolved `.node-version` as 22, the `npm run typecheck` (`> tsc`) and `npm test` (`Tests  457 passed (457)`) steps succeeded, and the job passed. The user accepted this run as the criterion's evidence instead of a test (C3, 2026-10-25). Since that commit, only files under this folder have changed.
 
 ## Open issues
 None
 
 ## Verdict
 Verdict: pass
-The workflow triggers on pull requests and runs both checks as plain steps, so either failing fails the job, and the suite and type check are green on this tree.
+The workflow ran on this PR's head commit, ran both checks as separate steps that fail the job on a non-zero exit, and passed, and the local suite and type check are green.
