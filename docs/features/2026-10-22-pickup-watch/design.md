@@ -252,7 +252,7 @@ Covers the stock board only (change 9, 2026-10-25); the other views keep decisio
 
 **Recommended references** (impeccable): product.md, layout.md, typeset.md, clarify.md, harden.md.
 
-**Data.** Nothing new from the server: phones and their store rows come from `watches[].cells` (a cell whose part differs from its watch's is the "Other color" of that watch's color), stores from `stores`, freshness from `lastCheckAt` and `intervalSec`, health from `health`, token from `token`, the stale time from `lastSuccessAt`, the cap note from `partsCount`. The finish color per color name is a small table in `src/web/logic.ts`.
+**Data.** Nothing new from the server: phones and their store rows come from `watches[].cells` (a cell whose part differs from its watch's is the "Other color" of that watch's color), stores from `stores`, freshness ("last check <age>") from `lastSuccessAt`, the last successful check spec.md:69 asks for, and `intervalSec`, health from `health`, token from `token`, the stale time from `lastSuccessAt`, the cap note from `partsCount`. The finish color per color name is a small table in `src/web/logic.ts`.
 
 - **Mockups:** `mockups/stock-board.html` (open it and use the state switcher at the top; `#stock`, `#none`, `#first`, `#loading`, `#down`, `#edge`).
 - **Layout:** 375 px: one column in this order: status (or banner), notes, phones with stock, the quiet list; Buy full width under each list; app top bar and bottom tabs as today. 768 px and up: the app sidebar as today; Buy moves beside the title. 1100 px and up: a reading column (max 720 px) for the phones with stock and a 280 px sticky side rail with the status block and the quiet list; the down banner spans both columns.
@@ -684,3 +684,4 @@ Stale: after the review, the owner chose open Wi-Fi access over security-1's LAN
 - 2026-10-23: Amended: one inline URL buy button per in-stock color, with store names as plain text and no URL in the message text. Why: every store link would open the same page; the owner chose buttons (user, 2026-10-23; gulag: staff-engineer-2).
 - 2026-10-25: UI brief approved. Why: user, 2026-10-25.
 - 2026-10-25: Amended: the stock board is redesigned (one section per phone with stock first, in-stock stores with Today/Tomorrow and distance, one Buy per phone, the rest collapsed, freshness always visible, a down banner over stale stock), per `## UI direction` and `mockups/stock-board.html`. Why: change 9 (user, 2026-10-25).
+- 2026-10-25: Amended: the stock board's freshness age counts from `lastSuccessAt`, not `lastCheckAt`, matching spec.md:69 and the built board. Why: change 10 (review finding on T22, user, 2026-10-25).
