@@ -90,5 +90,5 @@
   7. Between 768 and 1099 px the column is wider than the mockup's 720 px (src/web/App.tsx:90).
   8. design.md's UI direction Data paragraph says freshness comes from `lastCheckAt`, while spec.md:69 and the code use the last successful check (design wording).
   9. The app has no favicon, so every page load logs a 404 for `/favicon.ico`.
-- Status: planned
+- Status: done
 - Outcome: item 8 amended design.md's UI direction Data paragraph (freshness from `lastSuccessAt`) with a decision-log line, design approved automatically (wording only, no spec change); items 1-7 and 9 are task T23 in plan.md.
