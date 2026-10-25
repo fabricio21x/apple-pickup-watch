@@ -1,13 +1,13 @@
 # Verdict: Apple Store pickup stock monitor
 
 - Feature: pickup-watch
-- Tree: 2aecb48654af4369c95aad3c9128d4ee02cea772
+- Tree: 55079e19b5aae939cfcab6c46071b688f323084b
 - Date: 2026-10-25
 
-Validation evidence: `.git/fbs/evidence/pickup-watch/2026-10-25-1200/index.md` (captured on this tree after change 9, the redesigned stock board; below as "validate"). Test citations outside test/web-logic.test.ts are unchanged since the previous verdict: no server or test file other than test/web-logic.test.ts changed since f71bbca.
+Validation evidence: `.git/fbs/evidence/pickup-watch/2026-10-25-1257/index.md` (captured on this tree after change 10, the stock board follow-ups; below as "validate"). Test citations outside test/web-logic.test.ts are unchanged since the previous verdict: no server or test file other than test/web-logic.test.ts changed since f71bbca.
 
 ## Suite
-- `npm test` → "Test Files  8 passed (8)", "Tests  445 passed (445)"
+- `npm test` → "Test Files  8 passed (8)", "Tests  457 passed (457)"
 - `npx tsc --noEmit` → clean, no output
 - Failures not in the baseline: none (plan.md records no failing baseline tests)
 
@@ -27,18 +27,18 @@ Validation evidence: `.git/fbs/evidence/pickup-watch/2026-10-25-1200/index.md` (
 - [x] `unavailable` and `default` are not in stock — test/domain.test.ts:166 "treats %j as not in stock"; test/monitor.test.ts:256 "treats %s as not in stock: an alerted pair goes out"
 - [x] Exactly one down after 3 failures naming the cause; exactly one back up — test/monitor.test.ts:794 "sends one plain-text \"monitoring is down\" message naming a %s cause on the third failure, not before"; test/monitor.test.ts:822 "sends no further down message while the failures go on"; test/monitor.test.ts:865 "sends exactly one back up message on the first success after the down message"
 - [x] Settings shows whether the token works; a pasted cURL replaces it — validate: "spec.md:66 token status and cURL paste"; test/api.test.ts:775 "stores a pasted cURL and reports status and expiry only"
-- [x] Spike ended with a written result; the token stays valid unattended (no extension needed) — spike/RESULT.md (CDP variant kept a working pair 3 h unattended); validate: "spec.md:67" (token:auto running since 2026-10-24 15:25Z, a stored refresh about every 100 min overnight, the latest at 16:27:51Z on 2026-10-25); test/token-auto.test.ts:14 "refreshes a pair that expires within 20 minutes"
+- [x] Spike ended with a written result; the token stays valid unattended (no extension needed) — spike/RESULT.md (CDP variant kept a working pair 3 h unattended); validate: "spec.md:67" (token:auto running since 2026-10-24 15:25Z, stored refreshes at 14:47:49Z and 16:27:51Z on 2026-10-25); test/token-auto.test.ts:14 "refreshes a pair that expires within 20 minutes"
 - [x] The test button delivers a Telegram message — validate: "spec.md:68 test message" ("Test message sent.", POST 200, lastError null; receipt confirmed by the owner in the 2026-10-24 walkthrough)
-- [x] Stock board: Today / Tomorrow / unavailable per tracked pair, in stock first, last successful check — validate: "spec.md:69 stock board (redesigned, C9)" (phones with stock first, Today then nearest, the rest collapsed or under "Not in stock nearby", "last check 13 s ago"); test/web-logic.test.ts:222 "orders a phone stores Today first, then Tomorrow, then Apple own labels, nearest first within each"; test/web-logic.test.ts:243 "keeps stores without stock apart from the in-stock list: not checked ones listed, unavailable ones collapsed"; test/web-logic.test.ts:253 "shows phones with a Today store before phones with only Tomorrow, then in catalog order"; test/web-logic.test.ts:398 "shows the check interval, the age of the last successful check and the token time left"
-- [x] Four views; sidebar on wide screens, bottom tabs on the phone; refresh and back keep the view — validate: "spec.md:70 four views"
-- [x] Every view usable at 375 px with no horizontal scroll — validate: "spec.md:71 375 px" (scrollWidth 375/375 on all four views and with the Wi-Fi notice shown)
+- [x] Stock board: Today / Tomorrow / unavailable per tracked pair, in stock first, last successful check — validate: "spec.md:69 stock board" (phones with stock first, Today then nearest, the rest under "Not in stock nearby"; down state greyscale with "Last known stock" linked by aria-describedby; setup state "Not checking yet · finish setup"); test/stock-board.test.ts:93 "links each phone to the Last known stock note instead of fading the text"; test/stock-board.test.ts:83 "shows the status strip while setup is incomplete"; test/web-logic.test.ts:222 "orders a phone stores Today first, then Tomorrow, then Apple own labels, nearest first within each"; test/web-logic.test.ts:243 "keeps stores without stock apart from the in-stock list: not checked ones listed, unavailable ones collapsed"; test/web-logic.test.ts:253 "shows phones with a Today store before phones with only Tomorrow, then in catalog order"; test/web-logic.test.ts:398 "shows the check interval, the age of the last successful check and the token time left"
+- [x] Four views; sidebar on wide screens, bottom tabs on the phone; refresh and back keep the view — validate: "spec.md:70 four views" (also: 1060 px content column at 1500 px, sticky side rail, Tab order sidebar then Buy); test/stock-board.test.ts:42 "puts the cap note and its Trim your watches link before the first phone, so Tab reaches it before the Buy buttons"
+- [x] Every view usable at 375 px with no horizontal scroll — validate: "spec.md:71 375 px" (scrollWidth 375/375 on all four views, in the down state and with the Wi-Fi notice shown)
 - [x] Unreachable from other devices by default; reachable after the Wi-Fi opt-in — test/boot.test.ts:42 "binds loopback only by default and all interfaces once Wi-Fi access was saved"; validate: "spec.md:72 Wi-Fi" (listening on *:4319 with the opt-in, 200 from http://192.168.18.75:4319 and http://fabricios-macbook.local:4319; the restart notice shows while a change is pending)
 - [x] No API response contains the bot token or the Apple cookie values — test/api.test.ts:1094 "never returns the Apple cookie values or the bot token from any route, error paths included"; validate: "spec.md:73 no secrets"
-- [x] The whole app starts with one command — validate: "spec.md:74 one command" (`npm start` built and served the app on this tree)
+- [x] The whole app starts with one command — validate: "spec.md:74 one command" (`npm start` built and served the app on this tree, favicon included)
 
 ## Open issues
 None
 
 ## Verdict
 Verdict: pass
-Every acceptance criterion has a green test or validation evidence from this tree, nothing is escalated or blocked, and every final review, including change 9's, approved with comments.
+Every acceptance criterion has a green test or validation evidence from this tree, nothing is escalated or blocked, and every final review, including changes 9 and 10, approved with comments.
