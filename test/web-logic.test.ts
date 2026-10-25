@@ -396,8 +396,8 @@ describe('monitor status strip', () => {
     }) as StateDto
 
   it('shows the check interval, the age of the last successful check and the token time left', () => {
-    expect(statusStrip(base({}), now)).toEqual({
-      checking: true,
+    expect(statusStrip(base({}), now, true)).toEqual({
+      tone: 'ok',
       headline: 'Checking every minute',
       ago: 'last check 14 s ago',
       token: 'Token 1 h 50 min left',
@@ -405,31 +405,36 @@ describe('monitor status strip', () => {
     })
   })
   it('states the interval in seconds or minutes when it is not a minute', () => {
-    expect(statusStrip(base({ intervalSec: 30 }), now).headline).toBe('Checking every 30 s')
-    expect(statusStrip(base({ intervalSec: 300 }), now).headline).toBe('Checking every 5 min')
+    expect(statusStrip(base({ intervalSec: 30 }), now, true).headline).toBe('Checking every 30 s')
+    expect(statusStrip(base({ intervalSec: 300 }), now, true).headline).toBe('Checking every 5 min')
   })
   it('counts the age from the last successful check, in minutes once past a minute', () => {
-    expect(statusStrip(base({ lastSuccessAt: now - 11 * 60_000 }), now).ago).toBe('last check 11 min ago')
+    expect(statusStrip(base({ lastSuccessAt: now - 11 * 60_000 }), now, true).ago).toBe('last check 11 min ago')
   })
   it('says no check yet before any check succeeded', () => {
-    expect(statusStrip(base({ lastSuccessAt: null }), now).ago).toBe('no check yet')
+    expect(statusStrip(base({ lastSuccessAt: null }), now, true).ago).toBe('no check yet')
   })
   it('says Not checking and Token rejected when Apple rejected the token', () => {
     const s = statusStrip(
       base({ token: { status: 'rejected', expiresAt: null }, health: { status: 'down', failures: 3, cause: 'token-rejected' } }),
       now,
+      true,
     )
-    expect([s.checking, s.headline, s.token]).toEqual([false, 'Not checking', 'Token rejected'])
+    expect([s.tone, s.headline, s.token]).toEqual(['down', 'Not checking', 'Token rejected'])
   })
   it('says Token expired once the expiry has passed', () => {
-    expect(statusStrip(base({ token: { status: 'working', expiresAt: now - 1 } }), now).token).toBe('Token expired')
+    expect(statusStrip(base({ token: { status: 'working', expiresAt: now - 1 } }), now, true).token).toBe('Token expired')
   })
   it('says the token is missing', () => {
-    expect(statusStrip(base({ token: { status: 'missing', expiresAt: null } }), now).token).toBe('Token missing')
+    expect(statusStrip(base({ token: { status: 'missing', expiresAt: null } }), now, true).token).toBe('Token missing')
+  })
+  it('says Not checking yet and finish setup, with a neutral tone, while setup is incomplete', () => {
+    const s = statusStrip(base({}), now, false)
+    expect([s.tone, s.headline, s.ago]).toEqual(['idle', 'Not checking yet', 'finish setup'])
   })
   it('keeps saying Checking while a check fails, and says how many failed in a row', () => {
-    const s = statusStrip(base({ health: { status: 'failing', failures: 2, cause: 'network' } }), now)
-    expect([s.checking, s.trouble]).toEqual([true, 'Last check failed: Apple could not be reached (2 in a row)'])
+    const s = statusStrip(base({ health: { status: 'failing', failures: 2, cause: 'network' } }), now, true)
+    expect([s.tone, s.trouble]).toEqual(['ok', 'Last check failed: Apple could not be reached (2 in a row)'])
   })
 })
 

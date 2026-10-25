@@ -43,18 +43,13 @@ export function StockBoard({ state }: { state: StateDto | null }) {
   const staleTime = inStock.length > 0 ? lastGood : null
 
   return (
-    <div
-      className={cn(
-        'flex flex-col',
-        'min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,1fr)_280px] min-[1100px]:grid-rows-[auto_auto_auto_1fr] min-[1100px]:items-start min-[1100px]:gap-x-10',
-      )}
-    >
+    <div className="flex flex-col min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,1fr)_280px] min-[1100px]:items-start min-[1100px]:gap-x-10">
       {banner && (
         <div
           role="alert"
           className={cn(
             'mt-3 mb-1 rounded-[10px] border border-destructive/30 bg-destructive-bg px-3.5 py-3 text-sm leading-snug text-destructive',
-            'min-[1100px]:col-span-full min-[1100px]:row-start-1 min-[1100px]:mt-0 min-[1100px]:mb-5',
+            'min-[1100px]:col-span-full min-[1100px]:mt-0 min-[1100px]:mb-5',
           )}
         >
           <b className="mb-0.5 block text-[15px]">{banner.title}</b>
@@ -75,8 +70,8 @@ export function StockBoard({ state }: { state: StateDto | null }) {
         </div>
       )}
 
-      <div className="min-[1100px]:col-start-2 min-[1100px]:row-start-2">
-        <Status state={state} />
+      <div className="contents min-[1100px]:sticky min-[1100px]:top-7 min-[1100px]:col-start-2 min-[1100px]:row-start-2 min-[1100px]:block">
+        <Status state={state} setupComplete={setup.complete} />
         {setup.complete && note && (
           <p className="mt-1 mb-2 text-[13px] leading-snug text-ink-2 min-[1100px]:mt-3">
             {note}{' '}
@@ -86,9 +81,10 @@ export function StockBoard({ state }: { state: StateDto | null }) {
             to check them all.
           </p>
         )}
+        {setup.complete && quiet.length > 0 && <QuietList phones={quiet} asOf={lastGood} />}
       </div>
 
-      <div className="min-w-0 min-[1100px]:col-start-1 min-[1100px]:row-span-3 min-[1100px]:row-start-2">
+      <div className="min-w-0 min-[1100px]:col-start-1 min-[1100px]:row-start-2">
         {!setup.complete ? (
           <Setup steps={setup} />
         ) : inStock.length === 0 ? (
@@ -106,15 +102,19 @@ export function StockBoard({ state }: { state: StateDto | null }) {
           </>
         )}
       </div>
-
-      {setup.complete && quiet.length > 0 && <QuietList phones={quiet} asOf={lastGood} />}
     </div>
   )
 }
 
-function Status({ state }: { state: StateDto }) {
+const DOT: Record<ReturnType<typeof statusStrip>['tone'], string> = {
+  ok: 'bg-today shadow-[0_0_0_3px_var(--today-bg)]',
+  idle: 'bg-muted-foreground shadow-[0_0_0_3px_var(--border-soft)]',
+  down: 'bg-destructive shadow-[0_0_0_3px_var(--destructive-bg)]',
+}
+
+function Status({ state, setupComplete }: { state: StateDto; setupComplete: boolean }) {
   const now = useNow()
-  const { checking, headline, ago, token, trouble } = statusStrip(state, now)
+  const { tone, headline, ago, token, trouble } = statusStrip(state, now, setupComplete)
   return (
     <div
       className={cn(
@@ -122,13 +122,7 @@ function Status({ state }: { state: StateDto }) {
         'min-[1100px]:rounded-[10px] min-[1100px]:bg-secondary min-[1100px]:p-4',
       )}
     >
-      <span
-        aria-hidden
-        className={cn(
-          'size-2 rounded-full',
-          checking ? 'bg-today shadow-[0_0_0_3px_var(--today-bg)]' : 'bg-destructive shadow-[0_0_0_3px_var(--destructive-bg)]',
-        )}
-      />
+      <span aria-hidden className={cn('size-2 rounded-full', DOT[tone])} />
       <span>
         <strong role="status" className="font-semibold text-ink-2">
           {headline}
@@ -276,8 +270,8 @@ function QuietList({ phones, asOf }: { phones: Phone[]; asOf: string | null }) {
     <section
       aria-label="Not in stock nearby"
       className={cn(
-        'mt-2 border-t border-border pt-[18px]',
-        'min-[1100px]:col-start-2 min-[1100px]:row-start-3 min-[1100px]:mt-5 min-[1100px]:border-t-0 min-[1100px]:pt-0',
+        'order-last mt-2 border-t border-border pt-[18px]',
+        'min-[1100px]:mt-5 min-[1100px]:border-t-0 min-[1100px]:pt-0',
         asOf && 'grayscale',
       )}
     >

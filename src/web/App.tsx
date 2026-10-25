@@ -84,11 +84,12 @@ export default function App() {
         <h1 className="text-lg font-semibold">Pickup watch</h1>
         {state && view !== 'stock' && <StatusChips state={state} className="justify-end" />}
       </header>
+      {/* 68.75rem is 1100px; an arbitrary px breakpoint would sort before md: and lose */}
       <main
         className={cn(
           'mx-auto flex w-full flex-col gap-4 p-4 pb-24 md:pb-4',
           view === 'stock'
-            ? 'max-w-[752px] md:max-w-[784px] md:px-8 md:pt-7 md:pb-12 min-[1100px]:max-w-[1124px]'
+            ? 'max-w-[752px] md:max-w-[784px] md:px-8 md:pt-7 md:pb-12 min-[68.75rem]:max-w-[1124px]'
             : 'max-w-2xl',
         )}
       >

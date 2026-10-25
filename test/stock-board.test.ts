@@ -39,14 +39,19 @@ const capped: StateDto = { ...base, partsCount: { tracked: 22, cap: 20, unchecke
 const render = (state: StateDto | null) => renderToStaticMarkup(createElement(StockBoard, { state }))
 
 describe('stock board page', () => {
-  it('puts the cap note and its Trim your watches link before the phones, and the quiet list after them', () => {
+  it('puts the cap note and its Trim your watches link before the first phone, so Tab reaches it before the Buy buttons', () => {
     const html = render(capped)
     const trim = html.indexOf('Trim your watches')
-    const phone = html.indexOf('<h2')
-    const quiet = html.indexOf('Not in stock nearby')
+    const phone = html.indexOf('<section aria-label="iPhone 18 Pro Max')
     expect(trim).toBeGreaterThan(-1)
-    expect(trim).toBeLessThan(phone)
-    expect(quiet).toBeGreaterThan(phone)
+    expect(phone).toBeGreaterThan(trim)
+    expect(html.indexOf('href="https://www.apple.com/shop/buy-iphone/A1"')).toBeGreaterThan(trim)
+  })
+
+  it('keeps the quiet list, which moves last visually, free of links and buttons so focus order matches what is seen', () => {
+    const quiet = /<section aria-label="Not in stock nearby".*?<\/section>/.exec(render(capped))?.[0]
+    expect(quiet).toContain('iPhone 18 Pro Max')
+    expect(quiet).not.toMatch(/<(a|button)\b/)
   })
 
   it('starts the Buy link name with its visible text', () => {
@@ -78,7 +83,9 @@ describe('stock board page', () => {
   it('shows the status strip while setup is incomplete', () => {
     const html = render({ ...base, watches: [], token: { status: 'missing', expiresAt: null } })
     expect(html).toContain('Set up your watch')
-    expect(html).toContain('Checking every minute')
+    expect(html).toContain('Not checking yet')
+    expect(html).toContain('finish setup')
+    expect(html).not.toContain('Checking every minute')
     expect(html).toContain('Token missing')
   })
 
@@ -89,6 +96,12 @@ describe('stock board page', () => {
       expect(id).toBeTruthy()
       expect(html).toContain(`aria-describedby="${id}"`)
       expect(html).not.toContain('opacity-55')
+    })
+
+    it('greys a phone section under the down banner and leaves it in colour while healthy', () => {
+      const section = (html: string) => /<section aria-label="iPhone 18 Pro Max 256GB Black"[^>]*>/.exec(html)?.[0]
+      expect(section(render(down))).toMatch(/class="[^"]*\bgrayscale\b/)
+      expect(section(render(base))).not.toMatch(/grayscale/)
     })
 
     it('dates the Not in stock nearby list by the last successful check', () => {

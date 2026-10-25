@@ -155,13 +155,21 @@ function tokenText({ status, expiresAt }: StateDto['token'], now: number): strin
   return `Token ${tokenLabel(status).toLowerCase()}`
 }
 
-export function statusStrip(state: Pick<StateDto, 'intervalSec' | 'lastSuccessAt' | 'token' | 'health'>, now: number) {
+export function statusStrip(
+  state: Pick<StateDto, 'intervalSec' | 'lastSuccessAt' | 'token' | 'health'>,
+  now: number,
+  setupComplete: boolean,
+) {
   const { health, lastSuccessAt, intervalSec, token } = state
-  const checking = !isDown(state)
+  const tone = !setupComplete ? 'idle' : isDown(state) ? 'down' : 'ok'
   return {
-    checking,
-    headline: checking ? `Checking ${intervalText(intervalSec)}` : 'Not checking',
-    ago: lastSuccessAt === null ? 'no check yet' : `last check ${ageText(now - lastSuccessAt)}`,
+    tone,
+    headline: { ok: `Checking ${intervalText(intervalSec)}`, idle: 'Not checking yet', down: 'Not checking' }[tone],
+    ago: !setupComplete
+      ? 'finish setup'
+      : lastSuccessAt === null
+        ? 'no check yet'
+        : `last check ${ageText(now - lastSuccessAt)}`,
     token: tokenText(token, now),
     trouble: health.status === 'failing' ? healthText(health) : null,
   }
